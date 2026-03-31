@@ -84,9 +84,9 @@ struct SessionTimer: View {
                 // Pause/Resume button
                 Button(action: {
                     if sessionManager.isPaused {
-                        sessionManager.resumeSession()
+                        Task { await sessionManager.resumeSession() }
                     } else {
-                        sessionManager.pauseSession()
+                        Task { await sessionManager.pauseSession() }
                     }
                 }) {
                     HStack(spacing: 6) {
