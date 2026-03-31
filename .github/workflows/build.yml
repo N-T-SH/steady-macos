@@ -1,0 +1,94 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.0'
+      
+      - name: Build Release
+        run: |
+          xcodebuild -project Steady.xcodeproj \
+            -scheme Steady \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            -archivePath Steady.xcarchive \
+            archive
+      
+      - name: Export App
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath Steady.xcarchive \
+            -exportOptionsPlist exportOptions.plist \
+            -exportPath Export
+        continue-on-error: true
+      
+      - name: Create DMG
+        run: |
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_contents
+          
+          # Copy app bundle
+          if [ -d "Export/Steady.app" ]; then
+            cp -R Export/Steady.app dmg_contents/
+          elif [ -d "DerivedData/Build/Products/Release/Steady.app" ]; then
+            cp -R DerivedData/Build/Products/Release/Steady.app dmg_contents/
+          else
+            echo "App bundle not found"
+            find DerivedData -name "Steady.app" -type d 2>/dev/null || true
+            exit 1
+          fi
+          
+          # Create symbolic link to Applications folder
+          ln -s /Applications dmg_contents/Applications
+          
+          # Create DMG using hdiutil
+          hdiutil create -volname "Steady" \
+            -srcfolder dmg_contents \
+            -ov \
+            -format UDZO \
+            Steady.dmg
+          
+          # Clean up
+          rm -rf dmg_contents
+      
+      - name: Generate Release Notes
+        id: release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Extract changelog section for this version
+          if [ -f CHANGELOG.md ]; then
+            # Try to extract the section for this version
+            awk "/^## \\[$VERSION\\]/{flag=1} flag; /^## \\[/ && !/^## \\[$VERSION\\]/{flag=0}" CHANGELOG.md > release_notes.md || true
+          fi
+          
+          if [ ! -s release_notes.md ]; then
+            echo "## Steady $VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "### What's New" >> release_notes.md
+            echo "- See commit history for changes" >> release_notes.md
+          fi
+      
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Steady ${{ steps.release_notes.outputs.version }}"
+          body_path: release_notes.md
+          files: |
+            Steady.dmg
+          draft: false
+          prerelease: ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

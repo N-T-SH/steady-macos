@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '15.0'
+      
+      - name: Run Tests
+        run: |
+          xcodebuild test -project Steady.xcodeproj \
+            -scheme Steady \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES
+      
+      - name: Lint with SwiftLint
+        run: |
+          if command -v swiftlint &> /dev/null; then
+            swiftlint lint --reporter github-actions-logging
+          else
+            echo "SwiftLint not installed, skipping linting"
+          fi
+        continue-on-error: true

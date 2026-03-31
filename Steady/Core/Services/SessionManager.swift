@@ -243,17 +243,3 @@ class SessionManager: ObservableObject {
         timer?.invalidate()
     }
 }
-
-class URLTracker: ObservableObject {
-    var classificationHandler: ((URLClassification) -> Void)?
-    
-    func startTracking() async {}
-    func stopTracking() async {}
-    func setStrictnessLevel(_ level: StrictnessLevel) {}
-    func getClassifications() -> [URLClassification] { return [] }
-}
-
-class NotificationManager: ObservableObject {
-    func scheduleSessionNotification(title: String, body: String) {}
-    func notifyOffTask(classification: URLClassification, urgent: Bool = false) {}
-}
