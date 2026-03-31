@@ -5,12 +5,13 @@ enum KeychainError: Error {
     case itemNotFound
     case duplicateItem
     case invalidStatus(OSStatus)
+    case invalidDataFormat
 }
 
 struct KeychainHelper {
     static func save(key: String, data: String) throws {
         guard let dataToSave = data.data(using: .utf8) else {
-            throw KeychainError.invalidStatus(errSecParam)
+            throw KeychainError.invalidDataFormat
         }
         
         // First, try to delete any existing item
@@ -50,7 +51,7 @@ struct KeychainHelper {
         
         guard let data = result as? Data,
               let string = String(data: data, encoding: .utf8) else {
-            throw KeychainError.invalidStatus(errSecInvalidDataFormat)
+            throw KeychainError.invalidDataFormat
         }
         
         return string
