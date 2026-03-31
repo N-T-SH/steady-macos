@@ -3,66 +3,74 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 55;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		D3CD4F486E2BBFF141882502 /* SteadyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882500 /* SteadyApp.swift */; };
-		D3CD4F486E2BBFF141882503 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882501 /* AppDelegate.swift */; };
-		D3CD4F486E2BBFF141882504 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882502 /* AppState.swift */; };
-		D3CD4F486E2BBFF141882505 /* Intention.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882503 /* Intention.swift */; };
-		D3CD4F486E2BBFF141882506 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882504 /* Session.swift */; };
-		D3CD4F486E2BBFF141882507 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882505 /* ConversationTurn.swift */; };
-		D3CD4F486E2BBFF141882508 /* URLClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882506 /* URLClassification.swift */; };
-		D3CD4F486E2BBFF141882509 /* LLMConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882507 /* LLMConfig.swift */; };
-		D3CD4F486E2BBFF141882510 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882508 /* LLMProvider.swift */; };
-		D3CD4F486E2BBFF141882511 /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882509 /* ConversationEngine.swift */; };
-		D3CD4F486E2BBFF141882512 /* URLTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882510 /* URLTracker.swift */; };
-		D3CD4F486E2BBFF141882513 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882511 /* SessionManager.swift */; };
-		D3CD4F486E2BBFF141882514 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882512 /* NotificationManager.swift */; };
-		D3CD4F486E2BBFF141882515 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882513 /* HotkeyManager.swift */; };
-		D3CD4F486E2BBFF141882516 /* ObsidianSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882514 /* ObsidianSync.swift */; };
-		D3CD4F486E2BBFF141882517 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882515 /* MenuBarController.swift */; };
-		D3CD4F486E2BBFF141882518 /* ConversationPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882516 /* ConversationPanel.swift */; };
-		D3CD4F486E2BBFF141882519 /* IntentionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882517 /* IntentionCard.swift */; };
-		D3CD4F486E2BBFF141882520 /* SessionTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882518 /* SessionTimer.swift */; };
-		D3CD4F486E2BBFF141882521 /* EnergySlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882519 /* EnergySlider.swift */; };
-		D3CD4F486E2BBFF141882522 /* StrictnessSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882520 /* StrictnessSelector.swift */; };
-		D3CD4F486E2BBFF141882523 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882521 /* KeychainHelper.swift */; };
-		D3CD4F486E2BBFF141882524 /* AXHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882522 /* AXHelpers.swift */; };
-		D3CD4F486E2BBFF141882525 /* MarkdownFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3CD4F486E2BBFF141882523 /* MarkdownFormatter.swift */; };
+		000000000000000000000001 /* SteadyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* SteadyApp.swift */; };
+		000000000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* AppDelegate.swift */; };
+		000000000000000000000003 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* AppState.swift */; };
+		000000000000000000000004 /* Intention.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* Intention.swift */; };
+		000000000000000000000005 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* Session.swift */; };
+		000000000000000000000006 /* ConversationTurn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* ConversationTurn.swift */; };
+		000000000000000000000007 /* URLClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* URLClassification.swift */; };
+		000000000000000000000008 /* LLMConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000108 /* LLMConfig.swift */; };
+		000000000000000000000009 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000109 /* LLMProvider.swift */; };
+		00000000000000000000000A /* ConversationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010A /* ConversationEngine.swift */; };
+		00000000000000000000000B /* URLTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010B /* URLTracker.swift */; };
+		00000000000000000000000C /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010C /* SessionManager.swift */; };
+		00000000000000000000000D /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010D /* NotificationManager.swift */; };
+		00000000000000000000000E /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010E /* HotkeyManager.swift */; };
+		00000000000000000000000F /* ObsidianSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010F /* ObsidianSync.swift */; };
+		000000000000000000000010 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* MenuBarController.swift */; };
+		000000000000000000000011 /* ConversationPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* ConversationPanel.swift */; };
+		000000000000000000000012 /* IntentionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* IntentionCard.swift */; };
+		000000000000000000000013 /* SessionTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* SessionTimer.swift */; };
+		000000000000000000000014 /* EnergySlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* EnergySlider.swift */; };
+		000000000000000000000015 /* StrictnessSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000115 /* StrictnessSelector.swift */; };
+		000000000000000000000016 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000116 /* KeychainHelper.swift */; };
+		000000000000000000000017 /* AXHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000117 /* AXHelpers.swift */; };
+		000000000000000000000018 /* MarkdownFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000118 /* MarkdownFormatter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		5C0F877E54C4166200DDB088 /* Steady.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Steady.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		D3CD4F486E2BBFF141882500 /* SteadyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteadyApp.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882501 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882502 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882503 /* Intention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intention.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882504 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882505 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882506 /* URLClassification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLClassification.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882507 /* LLMConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMConfig.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882508 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882509 /* ConversationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationEngine.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882510 /* URLTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLTracker.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882511 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882512 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882513 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882514 /* ObsidianSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianSync.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882515 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882516 /* ConversationPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPanel.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882517 /* IntentionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentionCard.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882518 /* SessionTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTimer.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882519 /* EnergySlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergySlider.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882520 /* StrictnessSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrictnessSelector.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882521 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882522 /* AXHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXHelpers.swift; sourceTree = "<group>"; };
-		D3CD4F486E2BBFF141882523 /* MarkdownFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownFormatter.swift; sourceTree = "<group>"; };
+		000000000000000000000100 /* Steady.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Steady.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000101 /* SteadyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SteadyApp.swift; sourceTree = "<group>"; };
+		000000000000000000000102 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		000000000000000000000103 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		000000000000000000000104 /* Intention.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Intention.swift; sourceTree = "<group>"; };
+		000000000000000000000105 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		000000000000000000000106 /* ConversationTurn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationTurn.swift; sourceTree = "<group>"; };
+		000000000000000000000107 /* URLClassification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLClassification.swift; sourceTree = "<group>"; };
+		000000000000000000000108 /* LLMConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMConfig.swift; sourceTree = "<group>"; };
+		000000000000000000000109 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
+		00000000000000000000010A /* ConversationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationEngine.swift; sourceTree = "<group>"; };
+		00000000000000000000010B /* URLTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLTracker.swift; sourceTree = "<group>"; };
+		00000000000000000000010C /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
+		00000000000000000000010D /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		00000000000000000000010E /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		00000000000000000000010F /* ObsidianSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianSync.swift; sourceTree = "<group>"; };
+		000000000000000000000110 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		000000000000000000000111 /* ConversationPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationPanel.swift; sourceTree = "<group>"; };
+		000000000000000000000112 /* IntentionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentionCard.swift; sourceTree = "<group>"; };
+		000000000000000000000113 /* SessionTimer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionTimer.swift; sourceTree = "<group>"; };
+		000000000000000000000114 /* EnergySlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnergySlider.swift; sourceTree = "<group>"; };
+		000000000000000000000115 /* StrictnessSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StrictnessSelector.swift; sourceTree = "<group>"; };
+		000000000000000000000116 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
+		000000000000000000000117 /* AXHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXHelpers.swift; sourceTree = "<group>"; };
+		000000000000000000000118 /* MarkdownFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownFormatter.swift; sourceTree = "<group>"; };
+		000000000000000000000200 /* SteadyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SteadyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		D3CD4F486E2BBFF141882530 /* Frameworks */ = {
+		000000000000000000000300 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000301 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -72,125 +80,135 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		5C0F877E54C4166200DDB087 = {
+		000000000000000000000400 = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882540 /* Steady */,
+				000000000000000000000500 /* Steady */,
+				000000000000000000000600 /* SteadyTests */,
+				000000000000000000000700 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		5C0F877E54C4166200DDB088 /* Products */ = {
+		000000000000000000000500 /* Steady */ = {
 			isa = PBXGroup;
 			children = (
-				5C0F877E54C4166200DDB088 /* Steady.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		D3CD4F486E2BBFF141882540 /* Steady */ = {
-			isa = PBXGroup;
-			children = (
-				D3CD4F486E2BBFF141882550 /* App */,
-				D3CD4F486E2BBFF141882560 /* Core */,
-				D3CD4F486E2BBFF141882570 /* UI */,
-				D3CD4F486E2BBFF141882580 /* Utils */,
+				000000000000000000000501 /* App */,
+				000000000000000000000502 /* Core */,
+				000000000000000000000503 /* UI */,
+				000000000000000000000504 /* Utils */,
 			);
 			path = Steady;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882550 /* App */ = {
+		000000000000000000000501 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882500 /* SteadyApp.swift */,
-				D3CD4F486E2BBFF141882501 /* AppDelegate.swift */,
-				D3CD4F486E2BBFF141882502 /* AppState.swift */,
+				000000000000000000000101 /* SteadyApp.swift */,
+				000000000000000000000102 /* AppDelegate.swift */,
+				000000000000000000000103 /* AppState.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882560 /* Core */ = {
+		000000000000000000000502 /* Core */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882561 /* Models */,
-				D3CD4F486E2BBFF141882562 /* Services */,
-				D3CD4F486E2BBFF141882563 /* Store */,
+				000000000000000000000511 /* Models */,
+				000000000000000000000512 /* Services */,
+				000000000000000000000513 /* Store */,
 			);
 			path = Core;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882561 /* Models */ = {
+		000000000000000000000511 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882503 /* Intention.swift */,
-				D3CD4F486E2BBFF141882504 /* Session.swift */,
-				D3CD4F486E2BBFF141882505 /* ConversationTurn.swift */,
-				D3CD4F486E2BBFF141882506 /* URLClassification.swift */,
-				D3CD4F486E2BBFF141882507 /* LLMConfig.swift */,
+				000000000000000000000104 /* Intention.swift */,
+				000000000000000000000105 /* Session.swift */,
+				000000000000000000000106 /* ConversationTurn.swift */,
+				000000000000000000000107 /* URLClassification.swift */,
+				000000000000000000000108 /* LLMConfig.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882562 /* Services */ = {
+		000000000000000000000512 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882508 /* LLMProvider.swift */,
-				D3CD4F486E2BBFF141882509 /* ConversationEngine.swift */,
-				D3CD4F486E2BBFF141882510 /* URLTracker.swift */,
-				D3CD4F486E2BBFF141882511 /* SessionManager.swift */,
-				D3CD4F486E2BBFF141882512 /* NotificationManager.swift */,
-				D3CD4F486E2BBFF141882513 /* HotkeyManager.swift */,
+				000000000000000000000109 /* LLMProvider.swift */,
+				00000000000000000000010A /* ConversationEngine.swift */,
+				00000000000000000000010B /* URLTracker.swift */,
+				00000000000000000000010C /* SessionManager.swift */,
+				00000000000000000000010D /* NotificationManager.swift */,
+				00000000000000000000010E /* HotkeyManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882563 /* Store */ = {
+		000000000000000000000513 /* Store */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882514 /* ObsidianSync.swift */,
+				00000000000000000000010F /* ObsidianSync.swift */,
 			);
 			path = Store;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882570 /* UI */ = {
+		000000000000000000000503 /* UI */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882515 /* MenuBarController.swift */,
-				D3CD4F486E2BBFF141882516 /* ConversationPanel.swift */,
-				D3CD4F486E2BBFF141882571 /* Components */,
+				000000000000000000000110 /* MenuBarController.swift */,
+				000000000000000000000111 /* ConversationPanel.swift */,
+				000000000000000000000520 /* Components */,
 			);
 			path = UI;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882571 /* Components */ = {
+		000000000000000000000520 /* Components */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882517 /* IntentionCard.swift */,
-				D3CD4F486E2BBFF141882518 /* SessionTimer.swift */,
-				D3CD4F486E2BBFF141882519 /* EnergySlider.swift */,
-				D3CD4F486E2BBFF141882520 /* StrictnessSelector.swift */,
+				000000000000000000000112 /* IntentionCard.swift */,
+				000000000000000000000113 /* SessionTimer.swift */,
+				000000000000000000000114 /* EnergySlider.swift */,
+				000000000000000000000115 /* StrictnessSelector.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
 		};
-		D3CD4F486E2BBFF141882580 /* Utils */ = {
+		000000000000000000000504 /* Utils */ = {
 			isa = PBXGroup;
 			children = (
-				D3CD4F486E2BBFF141882521 /* KeychainHelper.swift */,
-				D3CD4F486E2BBFF141882522 /* AXHelpers.swift */,
-				D3CD4F486E2BBFF141882523 /* MarkdownFormatter.swift */,
+				000000000000000000000116 /* KeychainHelper.swift */,
+				000000000000000000000117 /* AXHelpers.swift */,
+				000000000000000000000118 /* MarkdownFormatter.swift */,
 			);
 			path = Utils;
+			sourceTree = "<group>";
+		};
+		000000000000000000000600 /* SteadyTests */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = SteadyTests;
+			sourceTree = "<group>";
+		};
+		000000000000000000000700 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000100 /* Steady.app */,
+				000000000000000000000200 /* SteadyTests.xctest */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		D3CD4F486E2BBFF141882502 /* Steady */ = {
+		000000000000000000000800 /* Steady */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D3CD4F486E2BBFF141882600 /* Build configuration list for PBXNativeTarget "Steady" */;
+			buildConfigurationList = 000000000000000000000801 /* Build configuration list for PBXNativeTarget "Steady" */;
 			buildPhases = (
-				D3CD4F486E2BBFF141882620 /* Sources */,
-				D3CD4F486E2BBFF141882530 /* Frameworks */,
+				000000000000000000000802 /* Sources */,
+				000000000000000000000300 /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -198,75 +216,130 @@
 			);
 			name = Steady;
 			productName = Steady;
-			productReference = 5C0F877E54C4166200DDB088 /* Steady.app */;
+			productReference = 000000000000000000000100 /* Steady.app */;
 			productType = "com.apple.product-type.application";
+		};
+		000000000000000000000810 /* SteadyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000811 /* Build configuration list for PBXNativeTarget "SteadyTests" */;
+			buildPhases = (
+				000000000000000000000812 /* Sources */,
+				000000000000000000000301 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				000000000000000000000813 /* PBXTargetDependency */,
+			);
+			name = SteadyTests;
+			productName = SteadyTests;
+			productReference = 000000000000000000000200 /* SteadyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		5C0F877E54C4166200DDB087 /* Project object */ = {
+		000000000000000000000900 /* Project object */ = {
 			isa = PBXProject;
-			buildConfigurationList = 5C0F877E54C4166200DDB089 /* Build configuration list for PBXProject "Steady" */;
-			compatibilityVersion = "Xcode 15.0";
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1430;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					000000000000000000000800 = {
+						CreatedOnToolsVersion = 14.3;
+					};
+					000000000000000000000810 = {
+						CreatedOnToolsVersion = 14.3;
+						TestTargetID = 000000000000000000000800;
+					};
+				};
+			};
+			buildConfigurationList = 000000000000000000000901 /* Build configuration list for PBXProject "Steady" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 5C0F877E54C4166200DDB087;
-			productRefGroup = 5C0F877E54C4166200DDB088 /* Products */;
+			mainGroup = 000000000000000000000400;
+			productRefGroup = 000000000000000000000700 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D3CD4F486E2BBFF141882502 /* Steady */,
+				000000000000000000000800 /* Steady */,
+				000000000000000000000810 /* SteadyTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXSourcesBuildPhase section */
-		D3CD4F486E2BBFF141882620 /* Sources */ = {
+		000000000000000000000802 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D3CD4F486E2BBFF141882502 /* SteadyApp.swift in Sources */,
-				D3CD4F486E2BBFF141882503 /* AppDelegate.swift in Sources */,
-				D3CD4F486E2BBFF141882504 /* AppState.swift in Sources */,
-				D3CD4F486E2BBFF141882505 /* Intention.swift in Sources */,
-				D3CD4F486E2BBFF141882506 /* Session.swift in Sources */,
-				D3CD4F486E2BBFF141882507 /* ConversationTurn.swift in Sources */,
-				D3CD4F486E2BBFF141882508 /* URLClassification.swift in Sources */,
-				D3CD4F486E2BBFF141882509 /* LLMConfig.swift in Sources */,
-				D3CD4F486E2BBFF141882510 /* LLMProvider.swift in Sources */,
-				D3CD4F486E2BBFF141882511 /* ConversationEngine.swift in Sources */,
-				D3CD4F486E2BBFF141882512 /* URLTracker.swift in Sources */,
-				D3CD4F486E2BBFF141882513 /* SessionManager.swift in Sources */,
-				D3CD4F486E2BBFF141882514 /* NotificationManager.swift in Sources */,
-				D3CD4F486E2BBFF141882515 /* HotkeyManager.swift in Sources */,
-				D3CD4F486E2BBFF141882516 /* ObsidianSync.swift in Sources */,
-				D3CD4F486E2BBFF141882517 /* MenuBarController.swift in Sources */,
-				D3CD4F486E2BBFF141882518 /* ConversationPanel.swift in Sources */,
-				D3CD4F486E2BBFF141882519 /* IntentionCard.swift in Sources */,
-				D3CD4F486E2BBFF141882520 /* SessionTimer.swift in Sources */,
-				D3CD4F486E2BBFF141882521 /* EnergySlider.swift in Sources */,
-				D3CD4F486E2BBFF141882522 /* StrictnessSelector.swift in Sources */,
-				D3CD4F486E2BBFF141882523 /* KeychainHelper.swift in Sources */,
-				D3CD4F486E2BBFF141882524 /* AXHelpers.swift in Sources */,
-				D3CD4F486E2BBFF141882525 /* MarkdownFormatter.swift in Sources */,
+				000000000000000000000001 /* SteadyApp.swift in Sources */,
+				000000000000000000000002 /* AppDelegate.swift in Sources */,
+				000000000000000000000003 /* AppState.swift in Sources */,
+				000000000000000000000004 /* Intention.swift in Sources */,
+				000000000000000000000005 /* Session.swift in Sources */,
+				000000000000000000000006 /* ConversationTurn.swift in Sources */,
+				000000000000000000000007 /* URLClassification.swift in Sources */,
+				000000000000000000000008 /* LLMConfig.swift in Sources */,
+				000000000000000000000009 /* LLMProvider.swift in Sources */,
+				00000000000000000000000A /* ConversationEngine.swift in Sources */,
+				00000000000000000000000B /* URLTracker.swift in Sources */,
+				00000000000000000000000C /* SessionManager.swift in Sources */,
+				00000000000000000000000D /* NotificationManager.swift in Sources */,
+				00000000000000000000000E /* HotkeyManager.swift in Sources */,
+				00000000000000000000000F /* ObsidianSync.swift in Sources */,
+				000000000000000000000010 /* MenuBarController.swift in Sources */,
+				000000000000000000000011 /* ConversationPanel.swift in Sources */,
+				000000000000000000000012 /* IntentionCard.swift in Sources */,
+				000000000000000000000013 /* SessionTimer.swift in Sources */,
+				000000000000000000000014 /* EnergySlider.swift in Sources */,
+				000000000000000000000015 /* StrictnessSelector.swift in Sources */,
+				000000000000000000000016 /* KeychainHelper.swift in Sources */,
+				000000000000000000000017 /* AXHelpers.swift in Sources */,
+				000000000000000000000018 /* MarkdownFormatter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000812 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		000000000000000000000813 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000000000800 /* Steady */;
+			targetProxy = 000000000000000000000814 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		000000000000000000000814 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000000800;
+			remoteInfo = Steady;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin XCBuildConfiguration section */
-		5C0F877E54C4166200DDB08A /* Debug */ = {
+		000000000000000000000A00 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
@@ -295,7 +368,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
@@ -309,25 +382,22 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
 		};
-		5C0F877E54C4166200DDB08B /* Release */ = {
+		000000000000000000000A01 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++17";
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
@@ -356,7 +426,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -364,7 +434,6 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -373,7 +442,7 @@
 			};
 			name = Release;
 		};
-		D3CD4F486E2BBFF141882601 /* Debug */ = {
+		000000000000000000000A02 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -382,11 +451,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Steady needs accessibility access to detect which websites you are visiting during focus sessions.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -399,7 +469,7 @@
 			};
 			name = Debug;
 		};
-		D3CD4F486E2BBFF141882602 /* Release */ = {
+		000000000000000000000A03 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -408,11 +478,12 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_LSApplicationCategory_TYPE = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				INFOPLIST_KEY_NSAccessibilityUsageDescription = "Steady needs accessibility access to detect which websites you are visiting during focus sessions.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -425,28 +496,81 @@
 			};
 			name = Release;
 		};
+		000000000000000000000A04 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitesh.steadyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Steady.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Steady";
+			};
+			name = Debug;
+		};
+		000000000000000000000A05 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitesh.steadyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Steady.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Steady";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		5C0F877E54C4166200DDB089 /* Build configuration list for PBXProject "Steady" */ = {
+		000000000000000000000901 /* Build configuration list for PBXProject "Steady" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				5C0F877E54C4166200DDB08A /* Debug */,
-				5C0F877E54C4166200DDB08B /* Release */,
+				000000000000000000000A00 /* Debug */,
+				000000000000000000000A01 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D3CD4F486E2BBFF141882600 /* Build configuration list for PBXNativeTarget "Steady" */ = {
+		000000000000000000000801 /* Build configuration list for PBXNativeTarget "Steady" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D3CD4F486E2BBFF141882601 /* Debug */,
-				D3CD4F486E2BBFF141882602 /* Release */,
+				000000000000000000000A02 /* Debug */,
+				000000000000000000000A03 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		000000000000000000000811 /* Build configuration list for PBXNativeTarget "SteadyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				000000000000000000000A04 /* Debug */,
+				000000000000000000000A05 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 5C0F877E54C4166200DDB087 /* Project object */;
+	rootObject = 000000000000000000000900 /* Project object */;
 }
