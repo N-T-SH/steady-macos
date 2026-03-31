@@ -9,12 +9,14 @@ class SessionManager: ObservableObject {
     @Published var elapsedTime: TimeInterval = 0
     @Published var isPaused: Bool = false
     @Published var sessionState: SessionState = .idle
+    @Published var urlClassifications: [URLClassification] = []
     
     private var timer: Timer?
     private var pauseStartTime: Date?
     private var totalPausedTime: TimeInterval = 0
-    private let urlTracker: URLTracker
-    private let notificationManager: NotificationManager
+    private var urlTracker: URLTracker?
+    private let notificationManager = NotificationManager.shared
+    private var llmProvider: LLMProvider?
     
     enum SessionState: String, Codable {
         case idle
@@ -23,10 +25,10 @@ class SessionManager: ObservableObject {
         case ending
     }
     
-    init(urlTracker: URLTracker = URLTracker(), 
-         notificationManager: NotificationManager = NotificationManager()) {
-        self.urlTracker = urlTracker
-        self.notificationManager = notificationManager
+    init() {}
+    
+    func configure(llmProvider: LLMProvider) {
+        self.llmProvider = llmProvider
     }
     
     func startSession(intention: Intention) async {
@@ -48,21 +50,22 @@ class SessionManager: ObservableObject {
         self.sessionState = .active
         self.elapsedTime = 0
         self.totalPausedTime = 0
+        self.urlClassifications = []
         
         startTimer()
-        await urlTracker.startTracking()
         
-        notificationManager.scheduleSessionNotification(
-            title: "Session Started",
-            body: "Focus on: \(intention.task)"
-        )
-        
-        urlTracker.classificationHandler = { [weak self] classification in
-            self?.handleURLClassification(classification)
+        // Start URL tracking if LLM provider is available
+        if let llmProvider = llmProvider {
+            let tracker = URLTracker()
+            self.urlTracker = tracker
+            await tracker.startTracking(intention: intention, llmProvider: llmProvider)
         }
+        
+        // Schedule session start notification
+        await notificationManager.scheduleSessionStart(intention: intention)
     }
     
-    func pauseSession() {
+    func pauseSession() async {
         guard sessionState == .active else { return }
         
         sessionState = .paused
@@ -70,13 +73,13 @@ class SessionManager: ObservableObject {
         pauseStartTime = Date()
         stopTimer()
         
-        notificationManager.scheduleSessionNotification(
-            title: "Session Paused",
-            body: "Your session is paused. Resume when ready."
-        )
+        // Stop URL tracking while paused
+        if let tracker = urlTracker {
+            await tracker.stopTracking()
+        }
     }
     
-    func resumeSession() {
+    func resumeSession() async {
         guard sessionState == .paused, let pauseStart = pauseStartTime else { return }
         
         let pauseDuration = Date().timeIntervalSince(pauseStart)
@@ -88,10 +91,10 @@ class SessionManager: ObservableObject {
         
         startTimer()
         
-        notificationManager.scheduleSessionNotification(
-            title: "Session Resumed",
-            body: "Back to focusing on: \(currentIntention?.task ?? "your task")"
-        )
+        // Resume URL tracking
+        if let tracker = urlTracker, let intention = currentIntention, let llmProvider = llmProvider {
+            await tracker.startTracking(intention: intention, llmProvider: llmProvider)
+        }
     }
     
     func endSession(reflection: String? = nil) async {
@@ -104,24 +107,32 @@ class SessionManager: ObservableObject {
             totalPausedTime += Date().timeIntervalSince(pauseStart)
         }
         
-        await urlTracker.stopTracking()
+        // Stop URL tracking
+        if let tracker = urlTracker {
+            await tracker.stopTracking()
+            self.urlTracker = nil
+        }
         
         if var session = activeSession {
             session.endTime = Date()
             session.postSessionReflection = reflection
-            session.urlClassifications = urlTracker.getClassifications()
+            session.urlClassifications = urlClassifications
             self.activeSession = session
+            
+            // Send session complete notification
+            await notificationManager.sendSessionComplete(session: session)
         }
         
-        notificationManager.scheduleSessionNotification(
-            title: "Session Complete",
-            body: "Great work! Session ended after \(formattedElapsedTime())."
-        )
+        // Clear notifications for this session
+        if let session = activeSession {
+            await notificationManager.clearNotifications(for: session.id)
+        }
         
         sessionState = .idle
         currentIntention = nil
         pauseStartTime = nil
         totalPausedTime = 0
+        urlClassifications = []
     }
     
     func logDistraction(reason: String) {
@@ -139,11 +150,6 @@ class SessionManager: ObservableObject {
             session.interruptions.append(distraction)
             self.activeSession = session
         }
-        
-        notificationManager.scheduleSessionNotification(
-            title: "Distraction Logged",
-            body: "Reason: \(reason)"
-        )
     }
     
     func acknowledgeDistraction(at index: Int) {
@@ -154,8 +160,37 @@ class SessionManager: ObservableObject {
         self.activeSession = session
     }
     
-    func setStrictnessMode(_ level: StrictnessLevel) {
-        urlTracker.setStrictnessLevel(level)
+    func handleOffTaskClassification(_ classification: URLClassification) async {
+        guard sessionState == .active else { return }
+        
+        urlClassifications.append(classification)
+        
+        if !classification.onTask {
+            let distraction = DistractionLog(
+                timestamp: Date(),
+                url: classification.url,
+                category: classification.category.rawValue,
+                duration: 0,
+                acknowledged: false
+            )
+            
+            if var session = activeSession {
+                session.interruptions.append(distraction)
+                self.activeSession = session
+            }
+            
+            // Send drift alert based on strictness level
+            switch currentIntention?.strictness ?? .gentle {
+            case .quiet:
+                break
+            case .gentle:
+                await notificationManager.sendDriftAlert(classification: classification)
+            case .focused:
+                await notificationManager.sendDriftAlert(classification: classification)
+            case .accountable:
+                await notificationManager.sendDriftAlert(classification: classification)
+            }
+        }
     }
     
     private func startTimer() {
@@ -174,38 +209,6 @@ class SessionManager: ObservableObject {
         guard let session = activeSession else { return }
         let totalTime = Date().timeIntervalSince(session.startTime)
         elapsedTime = totalTime - totalPausedTime
-    }
-    
-    private func handleURLClassification(_ classification: URLClassification) {
-        guard sessionState == .active else { return }
-        
-        if !classification.onTask {
-            let distraction = DistractionLog(
-                timestamp: Date(),
-                url: classification.url,
-                category: classification.category.rawValue,
-                duration: 0,
-                acknowledged: false
-            )
-            
-            if var session = activeSession {
-                session.interruptions.append(distraction)
-                self.activeSession = session
-            }
-            
-            switch currentIntention?.strictness ?? .gentle {
-            case .quiet:
-                break
-            case .gentle:
-                if Int.random(in: 1...3) == 1 {
-                    notificationManager.notifyOffTask(classification: classification)
-                }
-            case .focused:
-                notificationManager.notifyOffTask(classification: classification)
-            case .accountable:
-                notificationManager.notifyOffTask(classification: classification, urgent: true)
-            }
-        }
     }
     
     func formattedElapsedTime() -> String {
