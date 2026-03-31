@@ -1,0 +1,116 @@
+# SwiftLint Configuration for Steady
+
+# Exclude generated files and dependencies
+excluded:
+  - DerivedData
+  - "*.generated.swift"
+  - SteadyTests/
+
+# Rule configurations
+line_length:
+  warning: 120
+  error: 150
+  ignores_urls: true
+  ignores_function_declarations: false
+  ignores_comments: true
+
+indentation:
+  spaces: 4
+
+type_body_length:
+  warning: 400
+  error: 500
+
+function_body_length:
+  warning: 80
+  error: 120
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+# Opt-in rules
+opt_in_rules:
+  - array_init
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_range_nil_comparison
+  - discouraged_object_literal
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - enum_case_associated_values_count
+  - expiring_todo
+  - explicit_init
+  - explicit_self
+  - fallthrough
+  - file_header
+  - file_name
+  - first_where
+  - force_unwrapping
+  - function_default_parameter_at_end
+  - identical_operands
+  - implicit_return
+  - joined_default_parameter
+  - last_where
+  - literal_expression_end_indentation
+  - lower_acl_than_parent
+  - modifier_order
+  - multiline_arguments
+  - multiline_arguments_brackets
+  - multiline_function_chains
+  - multiline_literal_brackets
+  - multiline_parameters
+  - multiline_parameters_brackets
+  - operator_usage_whitespace
+  - overridden_super_call
+  - prefer_self_type_over_type_of_self
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - sorted_first_last
+  - sorted_imports
+  - static_operator
+  - strong_iboutlet
+  - toggle_bool
+  - trailing_closure
+  - unneeded_parentheses_in_closure_argument
+  - untyped_error_in_catch
+  - vertical_parameter_alignment_on_call
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - yoda_condition
+
+# Disabled rules
+disabled_rules:
+  - trailing_comma  # We prefer trailing commas for cleaner diffs
+  - todo            # TODOs are acceptable in development
+  - nesting         # Nested types are sometimes useful
+
+# Custom rules
+custom_rules:
+  no_objcMembers:
+    name: "No @objcMembers"
+    regex: "@objcMembers"
+    message: "Avoid @objcMembers for better Swift performance"
+    severity: warning
+
+  no_print:
+    name: "No print()"
+    regex: "(?<!Swift\\.)print\\("
+    message: "Use logger instead of print()"
+    severity: warning
+
+  no_ash:
+    name: "No assert(false)"
+    regex: "assert\\(false"
+    message: "Use assertionFailure() instead"
+    severity: error
+
+  prefer_keypath:
+    name: "Prefer KeyPath"
+    regex: "\\{\\s*\\$0\\."
+    message: "Consider using KeyPath syntax: \\.property"
+    severity: warning
