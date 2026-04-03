@@ -50,30 +50,18 @@ struct IntentionCard: View {
                     .lineLimit(2)
             }
             
-            // Duration and temptation bundle
-            HStack(spacing: 16) {
+            // Temptation bundle (if set)
+            if let temptation = intention.temptationBundle, !temptation.isEmpty {
                 HStack(spacing: 4) {
-                    Image(systemName: "clock")
+                    Image(systemName: "exclamationmark.triangle")
                         .font(.system(size: 12))
-                        .foregroundColor(.secondary)
-                    Text("\(intention.plannedDuration) min")
+                        .foregroundColor(.orange)
+                    Text("Watch for: \(temptation)")
                         .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.orange)
+                        .lineLimit(1)
+                    Spacer()
                 }
-                
-                if let temptation = intention.temptationBundle, !temptation.isEmpty {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 12))
-                            .foregroundColor(.orange)
-                        Text(temptation)
-                            .font(.system(size: 13))
-                            .foregroundColor(.orange)
-                            .lineLimit(1)
-                    }
-                }
-                
-                Spacer()
             }
             
             // Start button

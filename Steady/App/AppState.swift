@@ -1,8 +1,6 @@
 import SwiftUI
 import Combine
 
-// MARK: - App State
-
 @MainActor
 class AppState: ObservableObject {
     @Published var currentIntention: Intention?
@@ -14,11 +12,16 @@ class AppState: ObservableObject {
     @Published var distractionCount: Int = 0
     @Published var sessionHistory: [Session] = []
     @Published var isMenuBarIconActive: Bool = false
-    
+    @Published var activeTimers: [FocusTimer] = []
+
+    var sessionManager: SessionManager?
+    var conversationEngine: ConversationEngine?
+    var llmProvider: LLMProvider?
+    let localStore: LocalStore = .shared
+
     private var cancellables = Set<AnyCancellable>()
-    
+
     init() {
-        // Subscribe to panel visibility changes
         $isPanelVisible
             .dropFirst()
             .sink { [weak self] isVisible in
@@ -26,146 +29,219 @@ class AppState: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
-    // MARK: - Session Management
-    
-    func startSession(intention: Intention) {
-        currentIntention = intention
-        activeSession = Session(
+
+    func configure(sessionManager: SessionManager, conversationEngine: ConversationEngine, llmProvider: LLMProvider) {
+        self.sessionManager = sessionManager
+        self.conversationEngine = conversationEngine
+        self.llmProvider = llmProvider
+
+        sessionManager.$currentIntention
+            .receive(on: RunLoop.main)
+            .assign(to: \.currentIntention, on: self)
+            .store(in: &cancellables)
+
+        sessionManager.$activeSession
+            .receive(on: RunLoop.main)
+            .assign(to: \.activeSession, on: self)
+            .store(in: &cancellables)
+
+        // ActivityWatch needs no special permission — start tracking immediately
+        startContinuousTracking()
+    }
+
+    func startContinuousTracking() {
+        Task { await sessionManager?.startContinuousTracking() }
+    }
+
+    // MARK: - Panel lifecycle
+
+    func panelDidOpen() {
+        guard conversations.isEmpty else { return }
+        addConversationTurn(ConversationTurn(
+            timestamp: Date(),
+            role: .assistant,
+            content: "What are you working on?",
+            context: nil
+        ))
+    }
+
+    // MARK: - Session
+
+    private func autoStartSession(task: String) {
+        let intention = Intention(
             id: UUID(),
-            intentionId: intention.id,
-            startTime: Date(),
-            endTime: nil,
-            interruptions: [],
-            preSessionEnergy: 5,
-            postSessionReflection: nil,
-            urlClassifications: []
+            task: task,
+            whyItMatters: "",
+            scheduledDate: Date(),
+            strictness: currentStrictness,
+            temptationBundle: nil,
+            status: .active
         )
-        
-        // Add system message about session start
-        let systemMessage = ConversationTurn(
-            timestamp: Date(),
-            role: .assistant,
-            content: "Starting session: \(intention.task)",
-            context: ConversationContext(
-                intention: intention,
-                session: activeSession,
-                driftDuration: nil,
-                classification: nil
-            )
-        )
-        addConversationTurn(systemMessage)
+        currentIntention = intention
+        localStore.save(intention: intention)
+        Task {
+            await sessionManager?.startSession(intention: intention)
+        }
     }
-    
-    func endSession(reflection: String?) {
-        guard var session = activeSession else { return }
-        
-        session.endTime = Date()
-        session.postSessionReflection = reflection
-        sessionHistory.append(session)
-        
-        // Add system message about session end
-        let duration = session.duration
-        let formattedDuration = formatDuration(duration)
-        let message = reflection != nil 
-            ? "Session completed in \(formattedDuration). Reflection recorded."
-            : "Session completed in \(formattedDuration)."
-        
-        let systemMessage = ConversationTurn(
-            timestamp: Date(),
-            role: .assistant,
-            content: message,
-            context: ConversationContext(
-                intention: session.intention,
-                session: nil,
-                driftDuration: nil,
-                classification: nil
-            )
-        )
-        addConversationTurn(systemMessage)
-        
-        activeSession = nil
+
+    func endSession(reflection: String? = nil) {
+        guard let session = activeSession, let intention = currentIntention else { return }
+
+        var completed = session
+        completed.endTime = Date()
+        completed.postSessionReflection = reflection
+        completed.urlClassifications = sessionManager?.urlClassifications ?? []
+        localStore.save(session: completed)
+
+        var done = intention
+        done.status = .completed
+        localStore.save(intention: done)
+
+        sessionHistory.append(completed)
+
+        Task {
+            await sessionManager?.endSession(reflection: reflection)
+            await conversationEngine?.clearConversation()
+        }
+
         currentIntention = nil
-    }
-    
-    // MARK: - Distraction Logging
-    
-    func logDistraction(url: String?, category: String) {
-        guard var session = activeSession else { return }
-        
-        let log = DistractionLog(
-            timestamp: Date(),
-            url: url,
-            category: category,
-            duration: 0,
-            acknowledged: false
-        )
-        
-        session.interruptions.append(log)
-        distractionCount += 1
-        activeSession = session
-        
-        // Notify about distraction
-        let message = "Detected \(category) distraction"
-        
-        let systemMessage = ConversationTurn(
+        activeSession = nil
+
+        addConversationTurn(ConversationTurn(
             timestamp: Date(),
             role: .assistant,
-            content: message,
-            context: ConversationContext(
-                intention: session.intention,
-                session: session,
-                driftDuration: nil,
-                classification: nil
-            )
-        )
-        addConversationTurn(systemMessage)
+            content: "Session ended. Take a breather — what did you get done?",
+            context: nil
+        ))
     }
-    
-    // MARK: - Conversation Management
-    
+
+    // MARK: - Conversation
+
     func addConversationTurn(_ turn: ConversationTurn) {
         conversations.append(turn)
-        
-        // Limit conversation history to last 100 messages
         if conversations.count > 100 {
             conversations.removeFirst(conversations.count - 100)
         }
     }
-    
-    func sendUserMessage(_ content: String) {
-        let turn = ConversationTurn(
-            timestamp: Date(),
-            role: .user,
-            content: content,
-            context: ConversationContext(
-                intention: currentIntention,
-                session: activeSession,
-                driftDuration: nil,
-                classification: nil
-            )
-        )
-        addConversationTurn(turn)
+
+    // MARK: - Timers
+
+    func addTimer(label: String, minutes: Int, isNudge: Bool = false) {
+        let t = FocusTimer(label: label, endsAt: Date().addingTimeInterval(TimeInterval(minutes * 60)), isNudge: isNudge)
+        activeTimers.append(t)
     }
-    
+
+    func removeTimer(id: UUID) {
+        activeTimers.removeAll { $0.id == id }
+    }
+
+    /// Called every second from the UI's TimelineView to fire expired timers.
+    func tickTimers() {
+        let expired = activeTimers.filter { $0.isExpired }
+        guard !expired.isEmpty else { return }
+        activeTimers.removeAll { $0.isExpired }
+        for t in expired {
+            let message = t.isNudge
+                ? "Hey — \(t.label). How's it going?"
+                : "⏱ Time's up: \(t.label)"
+            addConversationTurn(ConversationTurn(
+                timestamp: Date(), role: .assistant, content: message, context: nil
+            ))
+        }
+        NotificationCenter.default.post(name: .focusTimerExpired, object: nil)
+    }
+
+    /// Scans an AI response for [TIMER:Xm:label] or [NUDGE:Xm:label] tags.
+    /// Strips the tag from the displayed text and schedules the appropriate timer.
+    func processTimerTag(in response: String) -> String {
+        var result = response
+        // Process both tag types; NUDGE first so overlapping patterns don't confuse the regex
+        for (pattern, isNudge) in [(#"\[NUDGE:(\d+)m:([^\]]+)\]"#, true), (#"\[TIMER:(\d+)m:([^\]]+)\]"#, false)] {
+            guard let range = result.range(of: pattern, options: .regularExpression) else { continue }
+            let tag = String(result[range])
+            let inner = tag.dropFirst().dropLast()           // strip [ ]
+            let parts = inner.split(separator: ":", maxSplits: 2)
+            guard parts.count == 3, let mins = Int(parts[1].dropLast()) else { continue }
+            addTimer(label: String(parts[2]), minutes: mins, isNudge: isNudge)
+            result = result.replacingCharacters(in: range, with: "")
+                           .trimmingCharacters(in: .whitespacesAndNewlines)
+            break  // one tag per response
+        }
+        return result
+    }
+
+    func sendUserMessage(_ content: String) {
+        var sessionWithLiveData = activeSession
+        sessionWithLiveData?.urlClassifications = sessionManager?.urlClassifications ?? []
+
+        let allActivity = sessionManager?.allActivityToday ?? []
+        let recentClassification = allActivity.last ?? lastClassification
+        let recentActivity = Array(allActivity.suffix(10))
+        let context = ConversationContext(
+            intention: currentIntention,
+            session: sessionWithLiveData,
+            driftDuration: nil,
+            classification: recentClassification,
+            recentActivity: recentActivity
+        )
+        addConversationTurn(ConversationTurn(timestamp: Date(), role: .user, content: content, context: context))
+
+        Task {
+            guard let engine = conversationEngine else {
+                addConversationTurn(ConversationTurn(
+                    timestamp: Date(),
+                    role: .assistant,
+                    content: "Add your API key in Settings (gear icon) to enable AI responses.",
+                    context: context
+                ))
+                return
+            }
+            let rawResponse = await engine.continueConversation(userMessage: content, context: context)
+            let response = processTimerTag(in: rawResponse)
+            addConversationTurn(ConversationTurn(timestamp: Date(), role: .assistant, content: response, context: context))
+
+            if sessionManager?.sessionState == .idle {
+                await extractAndStartSessionIfReady()
+            }
+        }
+    }
+
+    private func extractAndStartSessionIfReady() async {
+        guard let engine = conversationEngine,
+              sessionManager?.sessionState == .idle else { return }
+        guard conversations.contains(where: { $0.role == .user }) else { return }
+        if let task = await engine.extractIntentFromConversation(conversations) {
+            autoStartSession(task: task)
+        }
+    }
+
     func clearConversations() {
         conversations.removeAll()
     }
-    
-    // MARK: - Panel Visibility
-    
-    func togglePanel() {
-        isPanelVisible.toggle()
+
+    // MARK: - Distraction
+
+    func logDistraction(url: String?, category: String) {
+        guard var session = activeSession else { return }
+        let log = DistractionLog(timestamp: Date(), url: url, category: category, duration: 0, acknowledged: false)
+        session.interruptions.append(log)
+        distractionCount += 1
+        activeSession = session
     }
-    
-    func showPanel() {
-        isPanelVisible = true
+
+    func recordClassification(_ classification: URLClassification) {
+        lastClassification = classification
+        if !classification.onTask {
+            logDistraction(url: classification.url, category: classification.category.rawValue)
+        }
     }
-    
-    func hidePanel() {
-        isPanelVisible = false
-    }
-    
+
+    // MARK: - Panel visibility
+
+    func togglePanel() { isPanelVisible.toggle() }
+    func showPanel()   { isPanelVisible = true }
+    func hidePanel()   { isPanelVisible = false }
+
     private func handlePanelVisibilityChange(_ isVisible: Bool) {
         isMenuBarIconActive = isVisible
         NotificationCenter.default.post(
@@ -174,28 +250,38 @@ class AppState: ObservableObject {
             userInfo: ["isVisible": isVisible]
         )
     }
-    
-    // MARK: - Utility
-    
-    private func formatDuration(_ duration: TimeInterval) -> String {
-        let hours = Int(duration) / 3600
-        let minutes = Int(duration) / 60 % 60
-        
-        if hours > 0 {
-            return "\(hours)h \(minutes)m"
-        } else {
-            return "\(minutes)m"
-        }
+}
+
+// MARK: - Focus Timer
+
+struct FocusTimer: Identifiable {
+    let id: UUID
+    let label: String
+    let endsAt: Date
+    /// Nudge timers are LLM-initiated — they fire the same way but show no countdown, just a calm acknowledgement.
+    let isNudge: Bool
+
+    init(label: String, endsAt: Date, isNudge: Bool = false) {
+        self.id = UUID()
+        self.label = label
+        self.endsAt = endsAt
+        self.isNudge = isNudge
     }
-    
-    // MARK: - URL Classification
-    
-    func recordClassification(_ classification: URLClassification) {
-        lastClassification = classification
-        
-        if !classification.onTask {
-            logDistraction(url: classification.url, category: classification.category.rawValue)
-        }
+
+    var secondsRemaining: Int { max(0, Int(endsAt.timeIntervalSinceNow)) }
+    var isExpired: Bool { endsAt <= Date() }
+
+    var formattedRemaining: String {
+        let s = secondsRemaining
+        let m = s / 60; let sec = s % 60
+        return m > 0 ? "\(m)m \(String(format: "%02d", sec))s" : "\(String(format: "%02d", sec))s"
+    }
+
+    /// Human-readable target time, e.g. "at 3:45 PM"
+    var formattedTargetTime: String {
+        let f = DateFormatter()
+        f.timeStyle = .short
+        return "at \(f.string(from: endsAt))"
     }
 }
 
@@ -203,16 +289,14 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
     static let panelVisibilityChanged = Notification.Name("PanelVisibilityChanged")
+    static let focusTimerExpired      = Notification.Name("FocusTimerExpired")
 }
 
 // MARK: - Session Extension
 
 extension Session {
-    var intention: Intention? {
-        // This would need to be fetched from a store in real implementation
-        return nil
-    }
-    
+    @MainActor var intention: Intention? { LocalStore.shared.intention(for: intentionId) }
+
     var duration: TimeInterval {
         let end = endTime ?? Date()
         return end.timeIntervalSince(startTime)

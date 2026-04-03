@@ -9,31 +9,83 @@ class SessionManager: ObservableObject {
     @Published var elapsedTime: TimeInterval = 0
     @Published var isPaused: Bool = false
     @Published var sessionState: SessionState = .idle
-    @Published var urlClassifications: [URLClassification] = []
-    
-    private var timer: Timer?
+    @Published var urlClassifications: [URLClassification] = []    // current session slice
+    @Published var allActivityToday: [URLClassification] = []      // all activity since app launch
+    @Published var activityWatchConnected: Bool? = nil             // nil = not yet checked
+
+    private var elapsedTimer: Timer?
     private var pauseStartTime: Date?
     private var totalPausedTime: TimeInterval = 0
     private var urlTracker: URLTracker?
     private let notificationManager = NotificationManager.shared
     private var llmProvider: LLMProvider?
-    
+
     enum SessionState: String, Codable {
-        case idle
-        case active
-        case paused
-        case ending
+        case idle, active, paused, ending
     }
-    
+
     init() {}
-    
+
     func configure(llmProvider: LLMProvider) {
         self.llmProvider = llmProvider
     }
-    
+
+    // MARK: - Always-on tracking
+
+    /// Start continuous URL tracking regardless of session state.
+    /// Safe to call multiple times — won't create duplicate trackers.
+    func startContinuousTracking() async {
+        guard urlTracker == nil else {
+            print("[SessionManager] startContinuousTracking — tracker already running")
+            return
+        }
+        guard let llmProvider = llmProvider else {
+            print("[SessionManager] startContinuousTracking — no llmProvider configured")
+            return
+        }
+        print("[SessionManager] startContinuousTracking — creating URLTracker")
+        let tracker = URLTracker()
+        self.urlTracker = tracker
+        await tracker.setDelegate(self)
+        let rules = LocalStore.shared.urlRules
+        let projects = LocalStore.shared.intentions.map { $0.task }
+        await tracker.startTracking(llmProvider: llmProvider, knownRules: rules, knownProjects: projects)
+    }
+
+    /// Reassign a captured activity to a different project/category.
+    /// Updates in-memory log, persists a URL rule, and refreshes the tracker.
+    func reclassify(classificationAt timestamp: Date, project: String, category: URLCategory) {
+        guard let idx = allActivityToday.firstIndex(where: { $0.timestamp == timestamp }) else { return }
+        let old = allActivityToday[idx]
+        let updated = URLClassification(
+            url: old.url, pageTitle: old.pageTitle,
+            onTask: category.isProductive,
+            project: project,
+            category: category,
+            confidence: 1.0,
+            reasoning: "User classified",
+            timestamp: old.timestamp
+        )
+        allActivityToday[idx] = updated
+
+        let ruleKey = old.url.hasPrefix("app://") ? old.url : (URL(string: old.url)?.host ?? old.url)
+        LocalStore.shared.saveURLRule(domain: ruleKey, projectName: project, category: category)
+
+        if let tracker = urlTracker {
+            let rules = LocalStore.shared.urlRules
+            let projects = LocalStore.shared.intentions.map { $0.task }
+            Task {
+                await tracker.updateKnownRules(rules)
+                await tracker.updateKnownProjects(projects)
+            }
+        }
+    }
+
+    // MARK: - Session lifecycle
+
     func startSession(intention: Intention) async {
         guard sessionState == .idle else { return }
-        
+
         let session = Session(
             id: UUID(),
             intentionId: intention.id,
@@ -44,127 +96,97 @@ class SessionManager: ObservableObject {
             postSessionReflection: nil,
             urlClassifications: []
         )
-        
+
         self.activeSession = session
         self.currentIntention = intention
         self.sessionState = .active
         self.elapsedTime = 0
         self.totalPausedTime = 0
         self.urlClassifications = []
-        
-        startTimer()
-        
-        // Start URL tracking if LLM provider is available
-        if let llmProvider = llmProvider {
-            let tracker = URLTracker()
-            self.urlTracker = tracker
-            await tracker.startTracking(intention: intention, llmProvider: llmProvider)
+
+        startElapsedTimer()
+
+        // Update intention context on the already-running tracker.
+        // If tracking hasn't started yet (e.g. permission just granted), start it now.
+        if let tracker = urlTracker {
+            await tracker.updateIntention(intention)
+        } else {
+            await startContinuousTracking()
+            if let tracker = urlTracker {
+                await tracker.updateIntention(intention)
+            }
         }
-        
-        // Schedule session start notification
+
         await notificationManager.scheduleSessionStart(intention: intention)
+        await notificationManager.scheduleSessionNudge(session: session, intention: intention)
     }
-    
+
     func pauseSession() async {
         guard sessionState == .active else { return }
-        
         sessionState = .paused
         isPaused = true
         pauseStartTime = Date()
-        stopTimer()
-        
-        // Stop URL tracking while paused
-        if let tracker = urlTracker {
-            await tracker.stopTracking()
-        }
+        stopElapsedTimer()
+        // Tracker keeps running — we still capture activity while paused
     }
-    
+
     func resumeSession() async {
         guard sessionState == .paused, let pauseStart = pauseStartTime else { return }
-        
-        let pauseDuration = Date().timeIntervalSince(pauseStart)
-        totalPausedTime += pauseDuration
-        
+        totalPausedTime += Date().timeIntervalSince(pauseStart)
         sessionState = .active
         isPaused = false
         pauseStartTime = nil
-        
-        startTimer()
-        
-        // Resume URL tracking
-        if let tracker = urlTracker, let intention = currentIntention, let llmProvider = llmProvider {
-            await tracker.startTracking(intention: intention, llmProvider: llmProvider)
-        }
+        startElapsedTimer()
+        // Tracker is already running
     }
-    
+
     func endSession(reflection: String? = nil) async {
         guard sessionState == .active || sessionState == .paused else { return }
-        
         sessionState = .ending
-        stopTimer()
-        
+        stopElapsedTimer()
+
         if let pauseStart = pauseStartTime {
             totalPausedTime += Date().timeIntervalSince(pauseStart)
         }
-        
-        // Stop URL tracking
+
+        // Remove intention context from tracker — it keeps running for passive tracking
         if let tracker = urlTracker {
-            await tracker.stopTracking()
-            self.urlTracker = nil
+            await tracker.updateIntention(nil)
         }
-        
+
         if var session = activeSession {
             session.endTime = Date()
             session.postSessionReflection = reflection
             session.urlClassifications = urlClassifications
             self.activeSession = session
-            
-            // Send session complete notification
-            await notificationManager.sendSessionComplete(session: session)
+            if let intention = currentIntention {
+                await notificationManager.sendSessionComplete(session: session, intention: intention)
+            }
         }
-        
-        // Clear notifications for this session
+
         if let session = activeSession {
             await notificationManager.clearNotifications(for: session.id)
         }
-        
+
         sessionState = .idle
         currentIntention = nil
         pauseStartTime = nil
         totalPausedTime = 0
         urlClassifications = []
     }
-    
+
     func logDistraction(reason: String) {
         guard sessionState == .active || sessionState == .paused else { return }
-        
-        let distraction = DistractionLog(
-            timestamp: Date(),
-            url: nil,
-            category: reason,
-            duration: 0,
-            acknowledged: false
-        )
-        
+        let distraction = DistractionLog(timestamp: Date(), url: nil, category: reason, duration: 0, acknowledged: false)
         if var session = activeSession {
             session.interruptions.append(distraction)
             self.activeSession = session
         }
     }
-    
-    func acknowledgeDistraction(at index: Int) {
-        guard var session = activeSession,
-              index < session.interruptions.count else { return }
-        
-        session.interruptions[index].acknowledged = true
-        self.activeSession = session
-    }
-    
+
     func handleOffTaskClassification(_ classification: URLClassification) async {
         guard sessionState == .active else { return }
-        
-        urlClassifications.append(classification)
-        
+
         if !classification.onTask {
             let distraction = DistractionLog(
                 timestamp: Date(),
@@ -173,76 +195,85 @@ class SessionManager: ObservableObject {
                 duration: 0,
                 acknowledged: false
             )
-            
             if var session = activeSession {
                 session.interruptions.append(distraction)
                 self.activeSession = session
             }
-            
-            // Send drift alert based on strictness level
+
             switch currentIntention?.strictness ?? .gentle {
-            case .quiet:
-                break
-            case .gentle:
-                await notificationManager.sendDriftAlert(classification: classification)
-            case .focused:
-                await notificationManager.sendDriftAlert(classification: classification)
-            case .accountable:
-                await notificationManager.sendDriftAlert(classification: classification)
+            case .quiet: break
+            default: await notificationManager.sendDriftAlert(classification: classification)
             }
         }
     }
-    
-    private func startTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+
+    // MARK: - Elapsed timer
+
+    private func startElapsedTimer() {
+        elapsedTimer?.invalidate()
+        elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.updateElapsedTime()
         }
     }
-    
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
+
+    private func stopElapsedTimer() {
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
     }
-    
+
     private func updateElapsedTime() {
         guard let session = activeSession else { return }
-        let totalTime = Date().timeIntervalSince(session.startTime)
-        elapsedTime = totalTime - totalPausedTime
+        elapsedTime = Date().timeIntervalSince(session.startTime) - totalPausedTime
     }
-    
+
     func formattedElapsedTime() -> String {
-        let hours = Int(elapsedTime) / 3600
-        let minutes = (Int(elapsedTime) % 3600) / 60
-        let seconds = Int(elapsedTime) % 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%02d:%02d", minutes, seconds)
+        let h = Int(elapsedTime) / 3600
+        let m = (Int(elapsedTime) % 3600) / 60
+        let s = Int(elapsedTime) % 60
+        if h > 0 { return String(format: "%dh %02dm", h, m) }
+        if m > 0 { return String(format: "%dm %02ds", m, s) }
+        return String(format: "%ds", s)
+    }
+
+    deinit { elapsedTimer?.invalidate() }
+}
+
+// MARK: - URLTrackerDelegate
+
+extension SessionManager: URLTrackerDelegate {
+    nonisolated func urlTracker(_ tracker: URLTracker, didDetectURL url: String, title: String) {}
+
+    nonisolated func urlTracker(_ tracker: URLTracker, didClassifyURL classification: URLClassification) {
+        print("[SessionManager] classified: \(URL(string: classification.url)?.host ?? classification.url) — \(classification.category.rawValue), onTask=\(classification.onTask), project=\(classification.project ?? "nil")")
+        Task { @MainActor in
+            // Always accumulate in the daily log
+            self.allActivityToday.append(classification)
+            // Also accumulate in the session slice if a session is active
+            if self.sessionState == .active || self.sessionState == .paused {
+                self.urlClassifications.append(classification)
+            }
         }
     }
-    
-    func remainingTime() -> TimeInterval? {
-        guard let intention = currentIntention else { return nil }
-        let plannedSeconds = TimeInterval(intention.plannedDuration * 60)
-        return max(0, plannedSeconds - elapsedTime)
+
+    nonisolated func urlTracker(_ tracker: URLTracker, didDetectOffTask classification: URLClassification) {
+        Task { @MainActor in
+            await self.handleOffTaskClassification(classification)
+        }
     }
-    
-    func formattedRemainingTime() -> String {
-        guard let remaining = remainingTime() else { return "--:--" }
-        let minutes = Int(remaining) / 60
-        let seconds = Int(remaining) % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+
+    nonisolated func urlTracker(_ tracker: URLTracker, didDiscoverNewRule domain: String, projectName: String, category: URLCategory) {
+        Task { @MainActor in
+            LocalStore.shared.saveURLRule(domain: domain, projectName: projectName, category: category)
+            if let tracker = self.urlTracker {
+                let rules = LocalStore.shared.urlRules
+                await tracker.updateKnownRules(rules)
+            }
+        }
     }
-    
-    func progressPercentage() -> Double {
-        guard let intention = currentIntention, intention.plannedDuration > 0 else { return 0 }
-        let plannedSeconds = TimeInterval(intention.plannedDuration * 60)
-        return min(1.0, elapsedTime / plannedSeconds)
-    }
-    
-    deinit {
-        timer?.invalidate()
+
+    nonisolated func urlTracker(_ tracker: URLTracker, didUpdateActivityWatchStatus available: Bool) {
+        Task { @MainActor in
+            self.activityWatchConnected = available
+        }
     }
 }

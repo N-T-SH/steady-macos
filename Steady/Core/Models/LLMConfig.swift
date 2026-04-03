@@ -11,8 +11,8 @@ struct LLMConfig: Codable, Equatable {
     static let `default` = LLMConfig(
         providerURL: "https://openrouter.ai/api/v1",
         apiKeyIdentifier: "steady-openrouter-key",
-        classificationModel: "google/gemini-flash-2.0",
-        conversationModel: "anthropic/claude-haiku-4-5",
+        classificationModel: "",
+        conversationModel: "",
         maxTokens: 1000,
         temperature: 0.7
     )

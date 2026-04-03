@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Carbon
 
+@MainActor
 class MenuBarController: NSObject {
     var statusItem: NSStatusItem!
     var panel: NSPanel!
@@ -17,8 +18,12 @@ class MenuBarController: NSObject {
     private var globalHotkey: EventHotKeyRef?
     
     func setupMenuBar() {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(handleTimerExpired),
+            name: .focusTimerExpired, object: nil
+        )
         // Create the status item
-        statusItem = NSStatusBar.shared.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         // Configure the status item button
         if let button = statusItem.button {
@@ -68,8 +73,8 @@ class MenuBarController: NSObject {
         // Set the content view
         panel.contentView = hostingController.view
         
-        // Make panel hide when it loses focus
-        panel.hidesOnDeactivate = true
+        // Don't auto-hide on deactivate — we manage visibility manually
+        panel.hidesOnDeactivate = false
     }
     
     private func setupHotkey() {
@@ -156,9 +161,29 @@ class MenuBarController: NSObject {
     @objc func handleHotkey() {
         togglePanel()
     }
+
+    @objc private func handleTimerExpired() {
+        guard let button = statusItem.button else { return }
+        var count = 0
+        Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak button] timer in
+            count += 1
+            let isOrange = count % 2 == 1
+            button?.contentTintColor = isOrange ? .orange : nil
+            button?.image = NSImage(
+                systemSymbolName: isOrange ? "waveform.circle.fill" : "waveform",
+                accessibilityDescription: "Steady"
+            )
+            button?.image?.size = NSSize(width: 18, height: 18)
+            if count >= 12 { // ~5.4 seconds
+                timer.invalidate()
+                button?.contentTintColor = nil
+            }
+        }
+    }
     
     func showPanel() {
         positionPanelBelowStatusItem()
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         appState.showPanel()
         updateStatusItemAppearance()
@@ -220,7 +245,7 @@ extension FourCharCode {
     init(from string: String) {
         var result: FourCharCode = 0
         let characters = Array(string.utf8)
-        for i in 0..<min(4, characters.count) {
+        for i in 0..<Swift.min(4, characters.count) {
             result = result << 8 + FourCharCode(characters[i])
         }
         self = result

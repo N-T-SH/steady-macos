@@ -105,7 +105,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Write code",
             whyItMatters: "Ship feature",
-            plannedDuration: 60,
+            
             scheduledDate: Date(),
             strictness: .focused,
             temptationBundle: nil,
@@ -114,7 +114,7 @@ class LLMProviderTests: XCTestCase {
         
         let classification = try await provider.classifyURL(
             url: "https://github.com/test",
-            pageTitle: "GitHub",
+            title: "GitHub",
             intention: intention
         )
         
@@ -151,7 +151,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Deep work",
             whyItMatters: "Focus",
-            plannedDuration: 90,
+            
             scheduledDate: Date(),
             strictness: .accountable,
             temptationBundle: nil,
@@ -160,7 +160,7 @@ class LLMProviderTests: XCTestCase {
         
         let classification = try await provider.classifyURL(
             url: "https://twitter.com",
-            pageTitle: "Twitter",
+            title: "Twitter",
             intention: intention
         )
         
@@ -197,7 +197,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Focus",
             whyItMatters: "Important",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -312,7 +312,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Test",
             whyItMatters: "Testing",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -320,7 +320,7 @@ class LLMProviderTests: XCTestCase {
         )
         
         do {
-            _ = try await provider.classifyURL(url: "https://test.com", pageTitle: "Test", intention: intention)
+            _ = try await provider.classifyActivity(url: "https://test.com", title: "Test", intention: intention)
             XCTFail("Should have thrown an error")
         } catch {
             XCTAssertTrue(error is LLMError)
@@ -354,7 +354,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Test",
             whyItMatters: "Testing",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -362,7 +362,7 @@ class LLMProviderTests: XCTestCase {
         )
         
         do {
-            _ = try await provider.classifyURL(url: "https://test.com", pageTitle: "Test", intention: intention)
+            _ = try await provider.classifyActivity(url: "https://test.com", title: "Test", intention: intention)
             XCTFail("Should have thrown an error")
         } catch let error as LLMError {
             if case .apiError(let message) = error {
@@ -391,7 +391,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Test",
             whyItMatters: "Testing",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -399,7 +399,7 @@ class LLMProviderTests: XCTestCase {
         )
         
         do {
-            _ = try await provider.classifyURL(url: "https://test.com", pageTitle: "Test", intention: intention)
+            _ = try await provider.classifyActivity(url: "https://test.com", title: "Test", intention: intention)
             XCTFail("Should have thrown an error")
         } catch let error as LLMError {
             XCTAssertEqual(error, LLMError.noAPIKey)
@@ -417,7 +417,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Test",
             whyItMatters: "Testing",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -425,7 +425,7 @@ class LLMProviderTests: XCTestCase {
         )
         
         do {
-            _ = try await provider.classifyURL(url: "https://test.com", pageTitle: "Test", intention: intention)
+            _ = try await provider.classifyActivity(url: "https://test.com", title: "Test", intention: intention)
             XCTFail("Should have thrown an error")
         } catch let error as LLMError {
             if case .requestFailed(_) = error {
@@ -458,7 +458,7 @@ class LLMProviderTests: XCTestCase {
             id: UUID(),
             task: "Test",
             whyItMatters: "Testing",
-            plannedDuration: 30,
+            
             scheduledDate: Date(),
             strictness: .gentle,
             temptationBundle: nil,
@@ -466,7 +466,7 @@ class LLMProviderTests: XCTestCase {
         )
         
         do {
-            _ = try await provider.classifyURL(url: "https://test.com", pageTitle: "Test", intention: intention)
+            _ = try await provider.classifyActivity(url: "https://test.com", title: "Test", intention: intention)
             XCTFail("Should have thrown an error")
         } catch let error as LLMError {
             XCTAssertEqual(error, LLMError.invalidResponse)

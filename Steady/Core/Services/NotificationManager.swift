@@ -170,14 +170,13 @@ actor NotificationManager: NSObject {
     func scheduleSessionStart(intention: Intention) async {
         let content = UNMutableNotificationContent()
         content.title = "\(intention.task) session ready"
-        content.body = "Start your \(intention.plannedDuration)-minute focused session?"
+        content.body = "Your focused session is ready to start."
         content.categoryIdentifier = NotificationCategories.sessionCategory
         content.sound = .default
         content.interruptionLevel = .passive
         content.userInfo = [
             "intentionId": intention.id.uuidString,
-            "task": intention.task,
-            "duration": intention.plannedDuration
+            "task": intention.task
         ]
         
         // Immediate notification
@@ -192,9 +191,7 @@ actor NotificationManager: NSObject {
     }
     
     /// Schedule gentle nudge during active session
-    func scheduleSessionNudge(session: Session) async {
-        // Only send nudges for gentle, focused, or accountable strictness levels
-        guard let intention = await getIntention(for: session) else { return }
+    func scheduleSessionNudge(session: Session, intention: Intention) async {
         guard intention.strictness != .quiet else { return }
         
         let content = UNMutableNotificationContent()
@@ -208,8 +205,8 @@ actor NotificationManager: NSObject {
             "intentionId": session.intentionId.uuidString
         ]
         
-        // Send after 10 minutes of continuous activity
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 600, repeats: false)
+        // Nudge every 18 minutes for the duration of the session
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1080, repeats: true)
         let identifier = "\(NotificationIdentifiers.sessionNudge).\(session.id.uuidString)"
         
         await sendNotification(
@@ -266,9 +263,7 @@ actor NotificationManager: NSObject {
     }
     
     /// Send session complete notification
-    func sendSessionComplete(session: Session) async {
-        guard let intention = await getIntention(for: session) else { return }
-        
+    func sendSessionComplete(session: Session, intention: Intention) async {
         let duration = session.endTime?.timeIntervalSince(session.startTime) ?? 0
         let minutes = Int(duration / 60)
         
@@ -325,9 +320,9 @@ actor NotificationManager: NSObject {
         identifier: String,
         trigger: UNNotificationTrigger
     ) async {
-        // Rate limiting: max 3-4 notifications per day
+        // Rate limiting: allow up to 20 pending (covers repeating nudges + drift alerts)
         let pendingCount = await getPendingNotificationCount()
-        guard pendingCount < 4 else { return }
+        guard pendingCount < 20 else { return }
         
         let request = UNNotificationRequest(
             identifier: identifier,
@@ -343,12 +338,6 @@ actor NotificationManager: NSObject {
         }
     }
     
-    /// Helper to fetch intention for a session (would connect to data store in real implementation)
-    private func getIntention(for session: Session) async -> Intention? {
-        // This would typically fetch from Core Data or other persistence
-        // For now, return a placeholder - actual implementation would use IntentionStore
-        return nil
-    }
 }
 
 // MARK: - UNUserNotificationCenterDelegate

@@ -1,133 +1,285 @@
 import Foundation
-import ApplicationServices
 
 protocol URLTrackerDelegate: AnyObject {
     func urlTracker(_ tracker: URLTracker, didDetectURL url: String, title: String)
+    func urlTracker(_ tracker: URLTracker, didClassifyURL classification: URLClassification)
     func urlTracker(_ tracker: URLTracker, didDetectOffTask classification: URLClassification)
-    func urlTrackerDidLosePermission(_ tracker: URLTracker)
+    func urlTracker(_ tracker: URLTracker, didDiscoverNewRule domain: String, projectName: String, category: URLCategory)
+    func urlTracker(_ tracker: URLTracker, didUpdateActivityWatchStatus available: Bool)
 }
 
 actor URLTracker {
     weak var delegate: URLTrackerDelegate?
-    
+
     private var timer: Timer?
-    private var lastURL: String?
+    private var lastActivityKey: String?    // dedup: url for web, "app://App|title" for native
     private var driftStartTime: Date?
     private var llmProvider: LLMProvider?
     private var currentIntention: Intention?
-    
+    private var knownRules: [URLRule] = []
+    private var knownProjects: [String] = []
+
+    // ActivityWatch bucket cache
+    private var awWebBuckets: [String] = []
+    private var awWindowBucket: String? = nil
+    private var awBucketsLoadedAt: Date = .distantPast
+    private var awAvailable: Bool? = nil
+
+    private let awSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 2.0
+        cfg.timeoutIntervalForResource = 2.0
+        return URLSession(configuration: cfg)
+    }()
+
     var isTracking: Bool = false
     var pollingInterval: TimeInterval = 10.0
-    var gracePeriod: TimeInterval = 120.0 // 2 minutes
-    
-    func startTracking(intention: Intention, llmProvider: LLMProvider) {
+    var gracePeriod: TimeInterval = 120.0
+
+    func setDelegate(_ delegate: URLTrackerDelegate?) {
+        self.delegate = delegate
+    }
+
+    func updateKnownRules(_ rules: [URLRule]) {
+        self.knownRules = rules
+    }
+
+    func updateKnownProjects(_ projects: [String]) {
+        self.knownProjects = projects
+    }
+
+    func updateIntention(_ intention: Intention?) {
         self.currentIntention = intention
-        self.llmProvider = llmProvider
-        self.isTracking = true
-        
-        // Check permission first
-        if !AXHelpers.checkAccessibilityPermission() {
-            delegate?.urlTrackerDidLosePermission(self)
+        if intention == nil { driftStartTime = nil }
+    }
+
+    func startTracking(llmProvider: LLMProvider, knownRules: [URLRule] = [], knownProjects: [String] = []) {
+        guard !isTracking else {
+            print("[URLTracker] already tracking — skipping")
             return
         }
-        
-        // Start polling timer
-        timer = Timer.scheduledTimer(withTimeInterval: pollingInterval, repeats: true) { [weak self] _ in
-            Task { [weak self] in
-                await self?.pollCurrentURL()
+        self.llmProvider = llmProvider
+        self.knownRules = knownRules
+        self.knownProjects = knownProjects
+        self.isTracking = true
+
+        print("[URLTracker] startTracking — ActivityWatch backend (web + window watchers)")
+
+        let interval = pollingInterval
+        Task { @MainActor in
+            let t = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
+                Task { [weak self] in await self?.pollCurrentActivity() }
             }
+            await self.storeTimer(t)
+            print("[URLTracker] poll timer scheduled every \(interval)s")
         }
-        
-        // Immediate first poll
-        Task {
-            await pollCurrentURL()
-        }
+
+        Task { await pollCurrentActivity() }
     }
-    
+
+    private func storeTimer(_ t: Timer) { timer = t }
+
     func stopTracking() {
         isTracking = false
         timer?.invalidate()
         timer = nil
-        lastURL = nil
+        lastActivityKey = nil
         driftStartTime = nil
     }
-    
-    func checkPermission() -> Bool {
-        return AXHelpers.checkAccessibilityPermission()
-    }
-    
-    private func pollCurrentURL() {
+
+    // MARK: - Poll
+
+    private func pollCurrentActivity() async {
         guard isTracking else { return }
-        guard let pid = AXHelpers.getFrontmostBrowserPID() else { return }
-        
-        // Check permission again
-        if !AXHelpers.checkAccessibilityPermission() {
-            delegate?.urlTrackerDidLosePermission(self)
-            stopTracking()
-            return
-        }
-        
-        let browser = AXBrowser(bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "")
-        
-        var result: (url: String, title: String)?
-        
-        switch browser {
-        case .chrome, .brave, .arc, .edge:
-            result = AXHelpers.readURLFromChrome(pid: pid)
-        case .safari:
-            result = AXHelpers.readURLFromSafari()
-        case .firefox:
-            result = AXHelpers.readURLFromFirefox(pid: pid)
-        default:
-            return
-        }
-        
-        guard let (url, title) = result else { return }
-        
-        // Notify delegate of detected URL
+        guard let result = await pollViaActivityWatch() else { return }
+        handleNewActivity(url: result.url, title: result.title)
+    }
+
+    private func handleNewActivity(url: String, title: String) {
+        // Deduplicate: web events by URL, app events by url+title (window switches matter)
+        let key = url.hasPrefix("app://") ? "\(url)|\(title)" : url
         delegate?.urlTracker(self, didDetectURL: url, title: title)
-        
-        // Check if URL changed
-        if url != lastURL {
-            lastURL = url
-            driftStartTime = nil
-            
-            // Classify the new URL
-            Task {
-                await classifyAndNotify(url: url, title: title)
+        guard key != lastActivityKey else { return }
+        lastActivityKey = key
+        driftStartTime = nil
+        print("[URLTracker] new activity: \(url.prefix(80)) | \(title.prefix(60))")
+        Task { await classifyAndNotify(url: url, title: title) }
+    }
+
+    // MARK: - ActivityWatch
+
+    private func pollViaActivityWatch() async -> (url: String, title: String)? {
+        // Refresh bucket list every 5 minutes
+        let needsRefresh = (awWebBuckets.isEmpty && awWindowBucket == nil)
+            || Date().timeIntervalSince(awBucketsLoadedAt) > 300
+        if needsRefresh {
+            guard let buckets = await fetchAWBuckets() else {
+                if awAvailable != false {
+                    awAvailable = false
+                    delegate?.urlTracker(self, didUpdateActivityWatchStatus: false)
+                    print("[URLTracker] ActivityWatch not running. Install from https://activitywatch.net and install the browser extension.")
+                }
+                return nil
+            }
+            awWebBuckets = buckets.web
+            awWindowBucket = buckets.window
+            awBucketsLoadedAt = Date()
+            if awAvailable != true {
+                awAvailable = true
+                delegate?.urlTracker(self, didUpdateActivityWatchStatus: true)
+                print("[URLTracker] ActivityWatch connected — \(buckets.web.count) web bucket(s), window: \(buckets.window ?? "none")")
             }
         }
+
+        // Fetch latest window event to know which app is active
+        let windowEvent = awWindowBucket.flatMap { _ in () } != nil
+            ? await fetchLatestWindowEvent(bucket: awWindowBucket!)
+            : nil
+
+        // Fetch latest web event across all web buckets
+        var latestWeb: (url: String, title: String, ts: Date)? = nil
+        for bucket in awWebBuckets {
+            guard let ev = await fetchLatestWebEvent(bucket: bucket) else { continue }
+            if latestWeb == nil || ev.ts > latestWeb!.ts { latestWeb = ev }
+        }
+
+        if let win = windowEvent {
+            if isBrowserApp(win.appName) {
+                // Active app is a browser — use the web event's URL if available
+                if let web = latestWeb { return (web.url, web.title) }
+            } else {
+                // Active app is a native app — synthesize an app:// activity
+                let encoded = win.appName.addingPercentEncoding(withAllowedCharacters: .urlHostAllowed) ?? win.appName
+                return ("app://\(encoded)", win.windowTitle)
+            }
+        }
+
+        // Fallback: whatever web event we have
+        return latestWeb.map { ($0.url, $0.title) }
     }
-    
-    private func classifyAndNotify(url: String, title: String) async {
-        guard let llmProvider = llmProvider,
-              let intention = currentIntention else { return }
-        
+
+    private let browserApps: Set<String> = [
+        "Google Chrome", "Chrome", "Chromium",
+        "Safari", "Firefox", "Firefox Developer Edition",
+        "Brave Browser", "Arc", "Microsoft Edge",
+        "Opera", "Vivaldi", "Waterfox"
+    ]
+
+    private func isBrowserApp(_ name: String) -> Bool {
+        browserApps.contains(name)
+    }
+
+    private func fetchAWBuckets() async -> (web: [String], window: String?)? {
+        guard let url = URL(string: "http://localhost:5600/api/0/buckets/") else { return nil }
         do {
-            let classification = try await llmProvider.classifyURL(
-                url: url,
-                pageTitle: title,
-                intention: intention
+            let (data, resp) = try await awSession.data(from: url)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            let keys = dict.keys.sorted()
+            let web = keys.filter { $0.contains("aw-watcher-web") }
+            let window = keys.first { $0.contains("aw-watcher-window") }
+            guard !web.isEmpty || window != nil else { return nil }
+            return (web, window)
+        } catch { return nil }
+    }
+
+    private func fetchLatestWebEvent(bucket: String) async -> (url: String, title: String, ts: Date)? {
+        guard let endpoint = URL(string: "http://localhost:5600/api/0/buckets/\(bucket)/events?limit=1") else { return nil }
+        do {
+            let (data, resp) = try await awSession.data(from: endpoint)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let ev = events.first,
+                  let evData = ev["data"] as? [String: Any],
+                  let pageURL = evData["url"] as? String,
+                  pageURL.hasPrefix("http"),
+                  let timestamp = ev["timestamp"] as? String else { return nil }
+            let title = evData["title"] as? String ?? ""
+            let ts = ISO8601DateFormatter.shared.date(from: timestamp) ?? .distantPast
+            return (pageURL, title, ts)
+        } catch {
+            print("[URLTracker] AW web parse error (\(bucket)): \(error)")
+            return nil
+        }
+    }
+
+    private func fetchLatestWindowEvent(bucket: String) async -> (appName: String, windowTitle: String, ts: Date)? {
+        guard let endpoint = URL(string: "http://localhost:5600/api/0/buckets/\(bucket)/events?limit=1") else { return nil }
+        do {
+            let (data, resp) = try await awSession.data(from: endpoint)
+            guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            guard let events = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+                  let ev = events.first,
+                  let evData = ev["data"] as? [String: Any],
+                  let appName = evData["app"] as? String,
+                  let timestamp = ev["timestamp"] as? String else { return nil }
+            let title = evData["title"] as? String ?? ""
+            let ts = ISO8601DateFormatter.shared.date(from: timestamp) ?? .distantPast
+            return (appName, title, ts)
+        } catch {
+            print("[URLTracker] AW window parse error: \(error)")
+            return nil
+        }
+    }
+
+    // MARK: - Classification
+
+    private func classifyAndNotify(url: String, title: String) async {
+        // Rule lookup key: host for web URLs, full app:// for native apps
+        let ruleKey = url.hasPrefix("app://")
+            ? url
+            : (URL(string: url)?.host ?? url)
+
+        if let rule = knownRules.first(where: { $0.domain == ruleKey }) {
+            let classification = URLClassification(
+                url: url, pageTitle: title,
+                onTask: rule.category.isProductive,
+                project: rule.projectName,
+                category: rule.category,
+                confidence: 1.0,
+                reasoning: "Matched saved rule",
+                timestamp: Date()
             )
-            
-            if !classification.onTask {
-                // Start drift tracking
-                if driftStartTime == nil {
-                    driftStartTime = Date()
-                }
-                
-                let driftDuration = Date().timeIntervalSince(driftStartTime!)
-                
-                // Only notify if drift exceeds grace period
-                if driftDuration > gracePeriod {
+            delegate?.urlTracker(self, didClassifyURL: classification)
+            if rule.category.isProductive { driftStartTime = nil }
+            return
+        }
+
+        guard let llmProvider = llmProvider else { return }
+
+        do {
+            let classification = try await llmProvider.classifyActivity(
+                url: url, title: title,
+                intention: currentIntention,
+                knownRules: knownRules,
+                knownProjects: knownProjects
+            )
+            delegate?.urlTracker(self, didClassifyURL: classification)
+
+            if let project = classification.project, !project.isEmpty {
+                delegate?.urlTracker(self, didDiscoverNewRule: ruleKey, projectName: project, category: classification.category)
+            }
+
+            if currentIntention != nil && !classification.onTask {
+                if driftStartTime == nil { driftStartTime = Date() }
+                if Date().timeIntervalSince(driftStartTime!) > gracePeriod {
                     delegate?.urlTracker(self, didDetectOffTask: classification)
                 }
             } else {
-                // Reset drift tracking when back on task
                 driftStartTime = nil
             }
         } catch {
-            print("URL classification error: \(error)")
+            print("[URLTracker] classification error: \(error)")
         }
     }
+}
+
+// MARK: - ISO8601 helper
+
+private extension ISO8601DateFormatter {
+    static let shared: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 }

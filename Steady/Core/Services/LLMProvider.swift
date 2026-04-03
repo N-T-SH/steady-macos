@@ -23,69 +23,123 @@ struct LLMResponse: Codable {
 actor LLMProvider {
     private let config: LLMConfig
     private let urlSession: URLSession
-    
+
     init(config: LLMConfig, urlSession: URLSession = URLSession.shared) {
         self.config = config
         self.urlSession = urlSession
     }
+
+    /// Merges stored config with live UserDefaults values so settings
+    /// changes take effect immediately without an app restart.
+    private var liveConfig: LLMConfig {
+        let ud = UserDefaults.standard
+        var c = config
+        if let v = ud.string(forKey: "llm.providerURL"), !v.isEmpty       { c.providerURL = v }
+        if let v = ud.string(forKey: "llm.conversationModel"), !v.isEmpty  { c.conversationModel = v }
+        if let v = ud.string(forKey: "llm.classificationModel"), !v.isEmpty { c.classificationModel = v }
+        return c
+    }
     
-    func classifyURL(
-        url: String,
-        pageTitle: String,
-        intention: Intention
-    ) async throws -> URLClassification {
-        let prompt = buildClassificationPrompt(url: url, pageTitle: pageTitle, intention: intention)
-        
-        guard let apiKey = try? KeychainHelper.load(key: config.apiKeyIdentifier) else {
+    func extractIntent(from conversationText: String) async throws -> String? {
+        let live = liveConfig
+        guard let apiKey = try? KeychainHelper.load(key: live.apiKeyIdentifier) else {
             throw LLMError.noAPIKey
         }
-        
+        let prompt = """
+        Based on this conversation, what specific work task is the user trying to focus on?
+
+        \(conversationText)
+
+        If the user has clearly stated a work task, return ONLY a short task title (2–5 words).
+        If the conversation is still casual/unclear, return exactly: unclear
+        Return only the task name or "unclear". No punctuation, no quotes.
+        """
+        let messages: [[String: String]] = [["role": "user", "content": prompt]]
+        let model = live.classificationModel.isEmpty ? live.conversationModel : live.classificationModel
+        guard !model.isEmpty else { throw LLMError.noAPIKey }
+        let data = try await makeRequest(model: model, messages: messages, apiKey: apiKey, temperature: 0.1, maxTokens: 20)
+        let response = try JSONDecoder().decode(LLMResponse.self, from: data)
+        let raw = response.choices.first?.message.content ?? "unclear"
+        // Take only the first non-empty line — guards against models echoing back the prompt
+        let firstLine = raw
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty } ?? ""
+        let result = firstLine.trimmingCharacters(in: CharacterSet.punctuationCharacters.union(.whitespaces))
+        // Reject if empty, too long (model leaked instructions), or contains prompt fragments
+        let tooLong = result.count > 50
+        let looksLikePrompt = result.lowercased().hasPrefix("the user") || result.lowercased().contains("work task")
+        guard !result.isEmpty, !tooLong, !looksLikePrompt else { return nil }
+        return result.lowercased() == "unclear" ? nil : result
+    }
+
+    /// Classify any activity — web URL (http://...) or native app (app://AppName).
+    func classifyActivity(
+        url: String,
+        title: String,
+        intention: Intention?,
+        knownRules: [URLRule] = [],
+        knownProjects: [String] = []
+    ) async throws -> URLClassification {
+        let prompt = buildActivityPrompt(
+            url: url, title: title,
+            intention: intention,
+            knownRules: knownRules,
+            knownProjects: knownProjects
+        )
+
+        let live = liveConfig
+        guard let apiKey = try? KeychainHelper.load(key: live.apiKeyIdentifier) else {
+            throw LLMError.noAPIKey
+        }
+
         let messages: [[String: String]] = [
-            ["role": "system", "content": "You are a URL classifier. Respond ONLY with valid JSON in the exact format specified by the user."],
+            ["role": "system", "content": "You are an activity classifier for a productivity app. Respond ONLY with valid JSON in the exact format specified."],
             ["role": "user", "content": prompt]
         ]
-        
+
         let data = try await makeRequest(
-            model: config.classificationModel,
+            model: live.classificationModel,
             messages: messages,
             apiKey: apiKey,
-            temperature: config.temperature,
-            maxTokens: config.maxTokens
+            temperature: live.temperature,
+            maxTokens: live.maxTokens
         )
-        
+
         let response = try JSONDecoder().decode(LLMResponse.self, from: data)
         guard let content = response.choices.first?.message.content else {
             throw LLMError.invalidResponse
         }
-        
-        return try parseClassificationResponse(content, url: url, pageTitle: pageTitle)
+
+        return try parseClassificationResponse(content, url: url, pageTitle: title)
     }
     
     func generateConversationResponse(
         messages: [ConversationTurn],
         context: ConversationContext
     ) async throws -> String {
-        guard let apiKey = try? KeychainHelper.load(key: config.apiKeyIdentifier) else {
+        let live = liveConfig
+        guard let apiKey = try? KeychainHelper.load(key: live.apiKeyIdentifier) else {
             throw LLMError.noAPIKey
         }
-        
+
         let systemPrompt = buildConversationSystemPrompt(context: context)
-        
+
         var messageArray: [[String: String]] = [
             ["role": "system", "content": systemPrompt]
         ]
-        
+
         for turn in messages {
             let role = turn.role.rawValue
             messageArray.append(["role": role, "content": turn.content])
         }
-        
+
         let data = try await makeRequest(
-            model: config.conversationModel,
+            model: live.conversationModel,
             messages: messageArray,
             apiKey: apiKey,
-            temperature: config.temperature,
-            maxTokens: config.maxTokens
+            temperature: live.temperature,
+            maxTokens: live.maxTokens
         )
         
         let response = try JSONDecoder().decode(LLMResponse.self, from: data)
@@ -103,7 +157,9 @@ actor LLMProvider {
         temperature: Double,
         maxTokens: Int
     ) async throws -> Data {
-        guard let url = URL(string: "\(config.providerURL)/chat/completions") else {
+        let rawBase = liveConfig.providerURL
+        let baseURL = rawBase.hasSuffix("/") ? String(rawBase.dropLast()) : rawBase
+        guard let url = URL(string: "\(baseURL)/chat/completions") else {
             throw LLMError.invalidURL
         }
         
@@ -145,27 +201,83 @@ actor LLMProvider {
         }
     }
     
-    private func buildClassificationPrompt(url: String, pageTitle: String, intention: Intention) -> String {
-        return """
-        Analyze this URL and determine if it's on-task or off-task for the user's current intention.
-        
-        User's Intention: \(intention.task)
-        Why it matters: \(intention.whyItMatters)
-        
-        URL to classify: \(url)
-        Page Title: \(pageTitle)
-        
-        Respond with ONLY a JSON object in this exact format (no markdown, no code blocks):
+    /// Unified prompt for web URLs (http://…) and native app activity (app://AppName).
+    private func buildActivityPrompt(
+        url: String,
+        title: String,
+        intention: Intention?,
+        knownRules: [URLRule],
+        knownProjects: [String]
+    ) -> String {
+        let isAppActivity = url.hasPrefix("app://")
+        let appName = isAppActivity
+            ? (url.replacingOccurrences(of: "app://", with: "").removingPercentEncoding ?? url)
+            : nil
+        let activityLabel = isAppActivity
+            ? "App: \(appName ?? url)\nWindow title: \(title)"
+            : "URL: \(url)\nPage title: \(title)"
+
+        var prompt = "Classify this computer activity for a productivity tracker.\n\n"
+
+        // Current focus context
+        if let intention = intention {
+            prompt += "User's current focus: \"\(intention.task)\""
+            if !intention.whyItMatters.isEmpty { prompt += " (\(intention.whyItMatters))" }
+            prompt += "\n\n"
+        }
+
+        // Known projects (from intentions — named projects the user has worked on)
+        let allProjects = Array(Set(knownProjects + knownRules.map { $0.projectName }))
+            .filter { !$0.isEmpty }
+            .sorted()
+        if !allProjects.isEmpty {
+            prompt += "User's known projects — assign to one if relevant:\n"
+            for p in allProjects.prefix(30) { prompt += "  • \(p)\n" }
+            prompt += "\n"
+        }
+
+        // Domain/app → project examples from URL rules (user-confirmed assignments)
+        let examples = knownRules.prefix(20)
+        if !examples.isEmpty {
+            prompt += "Past activity mappings (use for reference):\n"
+            for rule in examples {
+                prompt += "  \(rule.domain) → \(rule.projectName) (\(rule.category.rawValue))\n"
+            }
+            prompt += "\n"
+        }
+
+        prompt += "\(activityLabel)\n\n"
+
+        if let intention = intention {
+            prompt += """
+            Is this activity on-task for "\(intention.task)"? \
+            Assign to an existing project above if it matches, or create a concise new project name. \
+            If clearly off-task (social media, news, entertainment), set onTask=false.
+
+            """
+        } else {
+            prompt += """
+            Classify productivity: onTask=true for work/learning (coding, design, research, communication, writing), \
+            false for leisure (social media, news, entertainment, gaming). \
+            Assign to an existing project above if it clearly matches, or create a concise project name for work activity, \
+            or null for clearly unproductive activity.
+
+            """
+        }
+
+        prompt += """
+        Respond with ONLY a JSON object (no markdown, no code blocks):
         {
-            "onTask": true/false,
-            "project": "project name if identifiable, or null if not applicable",
+            "onTask": true or false,
+            "project": "project name or null",
             "category": "one of: coding, design, research, communication, social_media, news, entertainment, other_work, unknown",
             "confidence": 0.0 to 1.0,
-            "reasoning": "brief explanation of the classification"
+            "reasoning": "one sentence"
         }
         """
+        return prompt
     }
-    
+
     private func parseClassificationResponse(_ content: String, url: String, pageTitle: String) throws -> URLClassification {
         let cleanContent = content
             .replacingOccurrences(of: "```json", with: "")
@@ -202,35 +314,69 @@ actor LLMProvider {
     }
     
     private func buildConversationSystemPrompt(context: ConversationContext) -> String {
-        var prompt = "You are a supportive mindfulness companion helping the user stay focused and intentional with their digital habits. "
-        
+        var prompt = """
+        You are Steady, a macOS menu bar app and AI companion for intentional, focused work. \
+        You track the user's computer activity (browser URLs and active apps) via ActivityWatch \
+        and classify it as productive or off-task. Only report activity explicitly listed below — \
+        never infer, guess, or fabricate URLs, apps, or sites the user may have visited. \
+        If no activity data is listed, say so honestly.
+        """
+
         if let intention = context.intention {
-            prompt += "The user's current intention is: \(intention.task). "
-            prompt += "Why it matters to them: \(intention.whyItMatters). "
-            prompt += "Their strictness level is: \(intention.strictness.rawValue). "
-        }
-        
-        if let session = context.session {
-            let duration = session.endTime?.timeIntervalSince(session.startTime) ?? Date().timeIntervalSince(session.startTime)
-            let minutes = Int(duration / 60)
-            prompt += "They have been working for \(minutes) minutes. "
-        }
-        
-        if let driftDuration = context.driftDuration {
-            let driftMinutes = Int(driftDuration / 60)
-            prompt += "They have been drifting for \(driftMinutes) minutes. "
-        }
-        
-        if let classification = context.classification {
-            if classification.onTask {
-                prompt += "They are currently on a relevant page: \(classification.pageTitle) (\(classification.category.rawValue)). "
-            } else {
-                prompt += "They are currently off-task on: \(classification.pageTitle) (\(classification.category.rawValue)). "
+            prompt += "\n\nCurrent focus: \"\(intention.task)\"."
+            if !intention.whyItMatters.isEmpty {
+                prompt += " Why it matters: \(intention.whyItMatters)."
             }
+            prompt += " Strictness: \(intention.strictness.rawValue)."
+        } else {
+            prompt += "\n\nNo active focus session — the user may be deciding what to work on, or browsing passively."
         }
-        
-        prompt += "Be brief, warm, and helpful. Use their context to provide personalized support."
-        
+
+        if let session = context.session {
+            let minutes = Int(Date().timeIntervalSince(session.startTime) / 60)
+            prompt += "\nFocus session running for \(minutes) minute\(minutes == 1 ? "" : "s")."
+        }
+
+        // Include actual tracked activity — only what was genuinely captured
+        if !context.recentActivity.isEmpty {
+            prompt += "\nRecent captured activity:"
+            for c in context.recentActivity {
+                let label = c.url.hasPrefix("app://")
+                    ? (c.url.replacingOccurrences(of: "app://", with: "").removingPercentEncoding ?? c.url)
+                    : (URL(string: c.url)?.host ?? c.url)
+                let status = c.onTask ? "on-task" : "off-task (\(c.category.rawValue))"
+                let proj = c.project.map { " [\($0)]" } ?? ""
+                prompt += "\n  • \(label)\(proj) — \(status)"
+            }
+        } else {
+            prompt += "\nNo activity has been captured yet."
+        }
+
+        if let classification = context.classification {
+            let label = classification.url.hasPrefix("app://")
+                ? (classification.url.replacingOccurrences(of: "app://", with: "").removingPercentEncoding ?? classification.url)
+                : (URL(string: classification.url)?.host ?? classification.url)
+            let taskStr = classification.onTask ? "on-task" : "off-task"
+            prompt += "\nCurrently: \(label) (\(classification.category.rawValue)) — \(taskStr)."
+        }
+
+        if let driftDuration = context.driftDuration {
+            prompt += "\nHas been off-task for \(Int(driftDuration / 60)) minutes."
+        }
+
+        prompt += "\n\nBe brief, warm, and direct. Only reference activity that is listed above."
+        prompt += """
+
+
+        Timer tags — append ONE tag at the very end of your response when appropriate, never mid-sentence:
+        • [TIMER:Xm:label] — user explicitly asked for a countdown timer or reminder (e.g. "remind me in 20 min"). \
+        The user will see a live countdown.
+        • [NUDGE:Xm:label] — you proactively decide a check-in would help (e.g. after a long focus block, or when \
+        the user mentions a deadline). The user will only see a calm "I'll check in soon" hint — no countdown.
+        Use TIMER only when the user requests it. Use NUDGE sparingly and only when genuinely useful. \
+        X must be whole minutes; label is 2–5 words.
+        """
+
         return prompt
     }
 }

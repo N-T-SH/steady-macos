@@ -23,7 +23,7 @@ enum MarkdownFormatter {
         var lines: [String] = []
         
         lines.append("### \(timestamp)")
-        lines.append("**Session:** \(intention.task) (\(intention.plannedDuration) min)")
+        lines.append("**Session:** \(intention.task)")
         
         lines.append("**Energy before:** \(session.preSessionEnergy)/10")
         

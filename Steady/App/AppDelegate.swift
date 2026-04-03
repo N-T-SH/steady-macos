@@ -5,29 +5,108 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     var menuBarController: MenuBarController!
     var appState = AppState()
-    
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Setup app state
-        setupAppState()
-        
-        // Setup menu bar controller
+        setupServices()
+
         menuBarController = MenuBarController()
         menuBarController.appState = appState
         menuBarController.setupMenuBar()
-        
-        // Hide dock icon (LSUIElement should be set in Info.plist)
+
         NSApp.setActivationPolicy(.accessory)
-        
-        // Prevent the app from showing in the dock
-        NSApp.hide(nil)
+
+        setupNotificationObservers()
     }
-    
+
     func applicationWillTerminate(_ notification: Notification) {
-        // Cleanup
+        HotkeyManager.shared.unregisterHotkeys()
     }
-    
-    private func setupAppState() {
-        // Load any persisted state here
-        // For now, we'll start fresh
+
+    // MARK: - Service Initialization
+
+    private func setupServices() {
+        // Build LLM config from UserDefaults (PreferencesView writes these keys)
+        var config = LLMConfig.default
+        if let url = UserDefaults.standard.string(forKey: "llm.providerURL"), !url.isEmpty {
+            config.providerURL = url
+        }
+        if let model = UserDefaults.standard.string(forKey: "llm.classificationModel"), !model.isEmpty {
+            config.classificationModel = model
+        }
+        if let model = UserDefaults.standard.string(forKey: "llm.conversationModel"), !model.isEmpty {
+            config.conversationModel = model
+        }
+
+        let llmProvider = LLMProvider(config: config)
+        let conversationEngine = ConversationEngine(llmProvider: llmProvider)
+        let sessionManager = SessionManager()
+        sessionManager.configure(llmProvider: llmProvider)
+
+        appState.configure(sessionManager: sessionManager, conversationEngine: conversationEngine, llmProvider: llmProvider)
+
+        // Request notification permissions
+        Task {
+            try? await NotificationManager.shared.requestAuthorization()
+        }
+
+        // Register global hotkeys
+        setupHotkeys()
+
+        // ActivityWatch provides tracking — no special macOS permissions needed
     }
+
+    private func setupHotkeys() {
+        let manager = HotkeyManager.shared
+
+        manager.onTogglePanel = { [weak self] in
+            DispatchQueue.main.async {
+                self?.menuBarController.togglePanel()
+            }
+        }
+
+        manager.onLogDistraction = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.appState.sessionManager?.sessionState == .active else { return }
+                self.appState.logDistraction(url: nil, category: "Manual")
+                NotificationCenter.default.post(name: .steadyShowLogDistraction, object: nil)
+            }
+        }
+
+        manager.onStartIntention = { [weak self] in
+            DispatchQueue.main.async {
+                self?.menuBarController.showPanel()
+            }
+        }
+
+        manager.registerHotkeys()
+    }
+
+    // MARK: - Notification Observers
+
+    private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleStartSession(_:)),
+            name: .init("SteadyStartSession"),
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOpenNotification(_:)),
+            name: .init("SteadyOpenNotification"),
+            object: nil
+        )
+    }
+
+    @objc private func handleStartSession(_ notification: NSNotification) {
+        menuBarController.showPanel()
+    }
+
+    @objc private func handleOpenNotification(_ notification: NSNotification) {
+        menuBarController.showPanel()
+    }
+}
+
+extension Notification.Name {
+    static let steadyShowLogDistraction = Notification.Name("SteadyShowLogDistraction")
 }

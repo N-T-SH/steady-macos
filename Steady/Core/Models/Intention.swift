@@ -4,7 +4,6 @@ struct Intention: Codable, Identifiable, Equatable {
     let id: UUID
     let task: String
     let whyItMatters: String
-    let plannedDuration: Int
     let scheduledDate: Date
     let strictness: StrictnessLevel
     let temptationBundle: String?

@@ -45,25 +45,20 @@ actor ConversationEngine {
         return messages
     }
     
-    func continueConversation(userMessage: String) async -> String {
-        guard !messages.isEmpty else {
-            return "I'm not sure how we got here. Let me start fresh for you."
-        }
-        
+    func continueConversation(userMessage: String, context: ConversationContext) async -> String {
         let userTurn = ConversationTurn(
             timestamp: Date(),
             role: .user,
             content: userMessage,
-            context: messages.last?.context
+            context: context
         )
         messages.append(userTurn)
-        
+
         if messages.count > maxHistoryLength {
             messages.removeFirst(messages.count - maxHistoryLength)
         }
-        
+
         do {
-            let context = messages.last?.context ?? ConversationContext(intention: nil, session: nil, driftDuration: nil, classification: nil)
             let response = try await llmProvider.generateConversationResponse(messages: messages, context: context)
             
             let assistantTurn = ConversationTurn(
@@ -101,6 +96,15 @@ actor ConversationEngine {
     
     func clearConversation() {
         messages = []
+    }
+
+    /// Tries to extract a clear work task from the conversation so far.
+    /// Returns nil if the conversation is still too ambiguous.
+    func extractIntentFromConversation(_ turns: [ConversationTurn]) async -> String? {
+        let relevant = turns.filter { $0.role != .system }
+        guard !relevant.isEmpty else { return nil }
+        let text = relevant.map { ($0.role == .user ? "User" : "Steady") + ": " + $0.content }.joined(separator: "\n")
+        return try? await llmProvider.extractIntent(from: text)
     }
     
     private func buildSystemPrompt(
