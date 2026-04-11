@@ -5,6 +5,8 @@ struct ConversationPanel: View {
     @State private var showingSettings = false
     @State private var showingActivityLog = false
     @State private var inputText = ""
+    @State private var newTodoText = ""
+    @State private var showingTodoAdd = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,12 +68,89 @@ struct ConversationPanel: View {
             }
             messagesList
             Divider()
+            if appState.showTodoPanel || !appState.localStore.todos.isEmpty {
+                todoPanel
+                Divider()
+            }
             if !appState.activeTimers.isEmpty {
                 timerBar
                 Divider()
             }
             inputArea
         }
+    }
+
+    // MARK: - Todo Panel
+
+    private var todoPanel: some View {
+        VStack(spacing: 0) {
+            // Add button — no title, flush right
+            HStack {
+                Spacer()
+                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showingTodoAdd.toggle() } }) {
+                    Image(systemName: showingTodoAdd ? "xmark" : "plus")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(showingTodoAdd ? "Cancel" : "Add intention")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 6)
+            .padding(.bottom, 2)
+
+            // Quick-add field
+            if showingTodoAdd {
+                HStack(spacing: 6) {
+                    TextField("Add intention…", text: $newTodoText)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.system(size: 12))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(NSColor.controlBackgroundColor)))
+                        .onSubmit { commitNewTodo() }
+                    Button(action: commitNewTodo) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(newTodoText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .accentColor)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(newTodoText.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 5)
+            }
+
+            // Todo list with drag reorder
+            if !appState.localStore.todos.isEmpty {
+                List {
+                    ForEach(appState.localStore.todos) { todo in
+                        TodoRow(
+                            todo: todo,
+                            onToggle: { appState.toggleTodo(id: todo.id) },
+                            onDelete: { appState.deleteTodo(id: todo.id) }
+                        )
+                        .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                    .onMove { appState.reorderTodos(from: $0, to: $1) }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .frame(height: min(CGFloat(appState.localStore.todos.count) * 28 + 4, 148))
+            }
+        }
+        .background(Color.accentColor.opacity(0.04))
+        .padding(.bottom, 4)
+    }
+
+    private func commitNewTodo() {
+        let text = newTodoText.trimmingCharacters(in: .whitespaces)
+        guard !text.isEmpty else { return }
+        appState.addTodo(text: text)
+        newTodoText = ""
+        showingTodoAdd = false
     }
 
     // MARK: - Timer Bar
@@ -175,6 +254,30 @@ struct ConversationPanel: View {
 
     private var inputArea: some View {
         HStack(spacing: 8) {
+            // Todo toggle button — left edge
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    appState.showTodoPanel.toggle()
+                    if !appState.showTodoPanel { showingTodoAdd = false }
+                }
+            }) {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: appState.showTodoPanel ? "checklist" : "circle")
+                        .font(.title2)
+                        .foregroundColor(appState.showTodoPanel ? .accentColor : (appState.activeTodos.isEmpty ? .gray : .accentColor))
+                    if !appState.activeTodos.isEmpty {
+                        Text("\(appState.activeTodos.count)")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 12, height: 12)
+                            .background(Circle().fill(Color.accentColor))
+                            .offset(x: 4, y: -4)
+                    }
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help(appState.showTodoPanel ? "Hide intentions" : "Show intentions")
+
             TextField("Message Steady…", text: $inputText)
                 .textFieldStyle(PlainTextFieldStyle())
                 .padding(.horizontal, 12)
@@ -198,6 +301,42 @@ struct ConversationPanel: View {
         guard !inputText.isEmpty else { return }
         appState.sendUserMessage(inputText)
         inputText = ""
+    }
+}
+
+// MARK: - Todo Row
+
+private struct TodoRow: View {
+    let todo: TodoItem
+    let onToggle: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Button(action: onToggle) {
+                Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 13))
+                    .foregroundColor(todo.isCompleted ? .secondary : .accentColor)
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            Text(todo.text)
+                .font(.system(size: 12))
+                .foregroundColor(todo.isCompleted ? .secondary : .primary)
+                .strikethrough(todo.isCompleted, color: .secondary)
+                .lineLimit(2)
+
+            Spacer()
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary.opacity(0.4))
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 

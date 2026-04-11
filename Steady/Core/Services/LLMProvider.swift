@@ -481,17 +481,34 @@ actor LLMProvider {
             prompt += "\nHas been off-task for \(Int(driftDuration / 60)) minutes."
         }
 
+        // Include active todos for on-task classification
+        if !context.activeTodos.isEmpty {
+            prompt += "\n\nActive task list:"
+            for todo in context.activeTodos {
+                prompt += "\n  • \(todo.text)"
+            }
+            prompt += "\nUse this task list when deciding if the user's current activity is on-task."
+        }
+
         prompt += "\n\nBe brief, warm, and direct. Only reference activity that is listed above."
         prompt += """
 
 
-        Timer tags — append ONE tag at the very end of your response when appropriate, never mid-sentence:
+        Tags — append at most ONE tag per category at the very end of your response, never mid-sentence:
+
+        Timer tags:
         • [TIMER:Xm:label] — user explicitly asked for a countdown timer or reminder (e.g. "remind me in 20 min"). \
         The user will see a live countdown.
         • [NUDGE:Xm:label] — you proactively decide a check-in would help (e.g. after a long focus block, or when \
         the user mentions a deadline). The user will only see a calm "I'll check in soon" hint — no countdown.
         Use TIMER only when the user requests it. Use NUDGE sparingly and only when genuinely useful. \
         X must be whole minutes; label is 2–5 words.
+
+        Todo tag:
+        • [TODO:task text] — emit this when the user mentions a specific task they need to do or want to track \
+        (e.g. "I need to fix the login bug", "remind me to email John", "add error handling to the API"). \
+        The task will be added to their to-do list automatically and the list will pop open. \
+        Only emit when a clear, actionable task is stated. task text should be concise (under 60 chars).
         """
 
         return prompt

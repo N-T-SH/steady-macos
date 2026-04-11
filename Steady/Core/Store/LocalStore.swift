@@ -9,6 +9,7 @@ class LocalStore: ObservableObject {
     @Published var intentions: [Intention] = []
     @Published var sessions: [Session] = []
     @Published var urlRules: [URLRule] = []
+    @Published var todos: [TodoItem] = []
     @Published var projectCategories: [ProjectCategory] = []
     /// Maps project name → category name.
     @Published var projectAssignments: [String: String] = [:]
@@ -18,6 +19,7 @@ class LocalStore: ObservableObject {
     private let intentionsURL: URL
     private let sessionsURL: URL
     private let urlRulesURL: URL
+    private let todosURL: URL
     private let projectCategoriesURL: URL
     private let projectAssignmentsURL: URL
     private let urlCategoryOverridesURL: URL
@@ -29,6 +31,7 @@ class LocalStore: ObservableObject {
         intentionsURL           = dir.appendingPathComponent("intentions.json")
         sessionsURL             = dir.appendingPathComponent("sessions.json")
         urlRulesURL             = dir.appendingPathComponent("url_rules.json")
+        todosURL                = dir.appendingPathComponent("todos.json")
         projectCategoriesURL    = dir.appendingPathComponent("project_categories.json")
         projectAssignmentsURL   = dir.appendingPathComponent("project_assignments.json")
         urlCategoryOverridesURL = dir.appendingPathComponent("url_category_overrides.json")
@@ -95,6 +98,28 @@ class LocalStore: ObservableObject {
     func deleteURLRule(_ id: UUID) {
         urlRules.removeAll { $0.id == id }
         persist(urlRules, to: urlRulesURL)
+    }
+
+    // MARK: - Todos
+
+    func save(todo: TodoItem) {
+        if let idx = todos.firstIndex(where: { $0.id == todo.id }) {
+            todos[idx] = todo
+        } else {
+            todos.append(todo)
+        }
+        persist(todos, to: todosURL)
+    }
+
+    func deleteTodo(_ id: UUID) {
+        todos.removeAll { $0.id == id }
+        persist(todos, to: todosURL)
+    }
+
+    func reorderTodos(from source: IndexSet, to destination: Int) {
+        todos.move(fromOffsets: source, toOffset: destination)
+        for i in todos.indices { todos[i].order = i }
+        persist(todos, to: todosURL)
     }
 
     // MARK: - Project Categories
@@ -201,6 +226,9 @@ class LocalStore: ObservableObject {
         }
         if let data = try? Data(contentsOf: urlRulesURL) {
             urlRules = (try? JSONDecoder().decode([URLRule].self, from: data)) ?? []
+        }
+        if let data = try? Data(contentsOf: todosURL) {
+            todos = (try? JSONDecoder().decode([TodoItem].self, from: data)) ?? []
         }
         if let data = try? Data(contentsOf: projectCategoriesURL) {
             projectCategories = (try? JSONDecoder().decode([ProjectCategory].self, from: data)) ?? []
