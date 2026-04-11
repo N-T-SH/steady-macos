@@ -6,6 +6,8 @@ struct ConversationPanel: View {
     @State private var showingActivityLog = false
     @State private var inputText = ""
     @State private var newTodoText = ""
+    @State private var showDone = false
+    @State private var showStashed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,9 +86,7 @@ struct ConversationPanel: View {
     private var todoPanel: some View {
         let active = appState.activeTodos
         let done = appState.completedTodos
-        let totalRows = active.count + (done.isEmpty ? 0 : done.count + 1) + 1  // +1 new-item row, +1 done header
-        let rowH: CGFloat = 26
-        let maxH: CGFloat = 180
+        let stashed = appState.stashedTodos
 
         return ScrollView {
             VStack(spacing: 0) {
@@ -95,7 +95,8 @@ struct ConversationPanel: View {
                     ActiveTodoRow(
                         todo: todo,
                         onToggle: { appState.toggleTodo(id: todo.id) },
-                        onStash:  { appState.stashTodo(id: todo.id) }
+                        onStash:  { appState.stashTodo(id: todo.id) },
+                        onDelete: { appState.deleteTodo(id: todo.id) }
                     )
                 }
 
@@ -107,36 +108,91 @@ struct ConversationPanel: View {
                     TextField("New item…", text: $newTodoText)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.system(size: 12))
-                        .foregroundColor(.primary)
                         .onSubmit { commitNewTodo() }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 5)
 
-                // Done section
-                if !done.isEmpty {
-                    Divider().padding(.horizontal, 14).padding(.vertical, 3)
-                    HStack {
-                        Text("Done")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.secondary)
+                // Done + Stashed section chips
+                if !done.isEmpty || !stashed.isEmpty {
+                    Divider()
+                        .padding(.horizontal, 14)
+                        .padding(.top, 2)
+                        .padding(.bottom, 4)
+
+                    HStack(spacing: 10) {
+                        if !done.isEmpty {
+                            collapsibleChip(
+                                label: "Done", count: done.count,
+                                isExpanded: showDone
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    showDone.toggle()
+                                }
+                            }
+                        }
+                        if !stashed.isEmpty {
+                            collapsibleChip(
+                                label: "Stashed", count: stashed.count,
+                                isExpanded: showStashed
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    showStashed.toggle()
+                                }
+                            }
+                        }
                         Spacer()
                     }
                     .padding(.horizontal, 14)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, 4)
 
-                    ForEach(done) { todo in
-                        DoneTodoRow(
-                            todo: todo,
-                            onRemove: { appState.deleteTodo(id: todo.id) }
-                        )
+                    if showDone {
+                        ForEach(done) { todo in
+                            DoneTodoRow(
+                                todo: todo,
+                                onRemove: { appState.deleteTodo(id: todo.id) }
+                            )
+                        }
+                    }
+
+                    if showStashed {
+                        ForEach(stashed) { todo in
+                            StashedTodoRow(
+                                todo: todo,
+                                onRestore: { appState.restoreTodo(id: todo.id) },
+                                onDelete:  { appState.deleteTodo(id: todo.id) }
+                            )
+                        }
                     }
                 }
             }
             .padding(.vertical, 6)
         }
-        .frame(height: min(CGFloat(totalRows) * rowH + 20, maxH))
+        .frame(maxHeight: 220)
+        .fixedSize(horizontal: false, vertical: true)
         .background(Color.accentColor.opacity(0.04))
+        .onAppear { appState.purgeOldDoneTodos() }
+    }
+
+    private func collapsibleChip(label: String, count: Int, isExpanded: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+                Text("\(count)")
+                    .font(.system(size: 9, weight: .bold))
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Capsule().fill(isExpanded ? Color.accentColor : Color.secondary.opacity(0.25)))
+                    .foregroundColor(isExpanded ? .white : .secondary)
+            }
+            .foregroundColor(isExpanded ? .accentColor : .secondary)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isExpanded ? Color.accentColor.opacity(0.12) : Color.clear)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 
     private func commitNewTodo() {
@@ -303,13 +359,16 @@ private struct ActiveTodoRow: View {
     let todo: TodoItem
     let onToggle: () -> Void
     let onStash: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
+            // Radio — marks done
             Button(action: onToggle) {
                 Image(systemName: "circle")
                     .font(.system(size: 13))
                     .foregroundColor(.accentColor)
+                    .frame(width: 28)
             }
             .buttonStyle(PlainButtonStyle())
 
@@ -317,18 +376,30 @@ private struct ActiveTodoRow: View {
                 .font(.system(size: 12))
                 .foregroundColor(.primary)
                 .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
+            // Stash
             Button(action: onStash) {
                 Image(systemName: "forward")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary.opacity(0.45))
+                    .foregroundColor(.secondary.opacity(0.4))
+                    .frame(width: 24)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Stash for later")
+
+            // Delete
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.4))
+                    .frame(width: 24)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Delete")
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 6)
+        .padding(.trailing, 4)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
@@ -339,17 +410,20 @@ private struct DoneTodoRow: View {
     let onRemove: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
+            // Delete (left of checkmark, matches original spec)
             Button(action: onRemove) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary.opacity(0.45))
+                    .foregroundColor(.secondary.opacity(0.4))
+                    .frame(width: 28)
             }
             .buttonStyle(PlainButtonStyle())
 
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 13))
-                .foregroundColor(.secondary.opacity(0.5))
+                .foregroundColor(.secondary.opacity(0.45))
+                .frame(width: 20)
 
             Text(todo.text)
                 .font(.system(size: 12))
@@ -359,7 +433,48 @@ private struct DoneTodoRow: View {
 
             Spacer()
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, 6)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct StashedTodoRow: View {
+    let todo: TodoItem
+    let onRestore: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Restore to active
+            Button(action: onRestore) {
+                Image(systemName: "arrow.uturn.left")
+                    .font(.system(size: 10))
+                    .foregroundColor(.accentColor.opacity(0.7))
+                    .frame(width: 28)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Restore to active")
+
+            Text(todo.text)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Delete
+            Button(action: onDelete) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.4))
+                    .frame(width: 24)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Delete")
+        }
+        .padding(.leading, 6)
+        .padding(.trailing, 4)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
     }

@@ -36,6 +36,11 @@ class AppState: ObservableObject {
                 self?.handlePanelVisibilityChange(isVisible)
             }
             .store(in: &cancellables)
+
+        // Forward LocalStore changes so views observing AppState re-render immediately
+        localStore.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     func configure(sessionManager: SessionManager, conversationEngine: ConversationEngine, llmProvider: LLMProvider) {
@@ -193,6 +198,7 @@ class AppState: ObservableObject {
 
     var activeTodos: [TodoItem] { localStore.todos.filter { !$0.isCompleted && !$0.isStashed } }
     var completedTodos: [TodoItem] { localStore.todos.filter { $0.isCompleted } }
+    var stashedTodos: [TodoItem] { localStore.todos.filter { $0.isStashed && !$0.isCompleted } }
 
     func addTodo(text: String) {
         let todo = TodoItem(text: text, order: localStore.todos.count)
@@ -215,6 +221,21 @@ class AppState: ObservableObject {
         var todo = localStore.todos[idx]
         todo.stash()
         localStore.save(todo: todo)
+    }
+
+    func restoreTodo(id: UUID) {
+        guard let idx = localStore.todos.firstIndex(where: { $0.id == id }) else { return }
+        var todo = localStore.todos[idx]
+        todo.isStashed = false
+        todo.stashedAt = nil
+        localStore.save(todo: todo)
+    }
+
+    func purgeOldDoneTodos() {
+        let cutoff = Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date()
+        localStore.todos
+            .filter { $0.isCompleted && ($0.completedAt ?? $0.createdAt) < cutoff }
+            .forEach { localStore.deleteTodo($0.id) }
     }
 
     func reorderTodos(from source: IndexSet, to destination: Int) {
