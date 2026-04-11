@@ -22,7 +22,10 @@ jobs:
           xcodebuild test -project Steady.xcodeproj \
             -scheme Steady \
             -destination 'platform=macOS' \
-            -enableCodeCoverage YES
+            -enableCodeCoverage YES \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
       
       - name: Lint with SwiftLint
         run: |
