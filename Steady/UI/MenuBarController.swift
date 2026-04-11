@@ -16,6 +16,9 @@ class MenuBarController: NSObject {
     // Hotkey support
     private var eventMonitor: Any?
     private var globalHotkey: EventHotKeyRef?
+
+    // Hourly check-in flash
+    private var hourlyCheckInTimer: Timer?
     
     func setupMenuBar() {
         NotificationCenter.default.addObserver(
@@ -42,6 +45,11 @@ class MenuBarController: NSObject {
         
         // Setup event monitor for clicking outside
         setupEventMonitor()
+
+        // Flash the icon once an hour as a gentle check-in prompt
+        hourlyCheckInTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { self?.handleTimerExpired() }
+        }
     }
     
     private func setupPanel() {
@@ -229,6 +237,7 @@ class MenuBarController: NSObject {
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
         }
+        hourlyCheckInTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
     }
 }

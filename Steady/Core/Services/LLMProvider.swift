@@ -40,6 +40,115 @@ actor LLMProvider {
         return c
     }
     
+    // MARK: - Infographic generation
+
+    func generateInfographic(stats: FocusStats) async throws -> InfographicSpec {
+        let live = liveConfig
+        guard let apiKey = try? KeychainHelper.load(key: live.apiKeyIdentifier) else {
+            throw LLMError.noAPIKey
+        }
+
+        let recentDots = stats.recentChecks.map { s -> String in
+            switch s { case .onTask: return "●"; case .drift: return "◐"; case .goofingOff: return "○" }
+        }.joined(separator: "")
+        let prompt = """
+        You are generating a small header card for a macOS focus-productivity app called Steady. \
+        The card replaces the app logo/name — it must be informative, motivating, and fit in a single short row (≈50 px tall). \
+        No markdown. No prose. Return ONLY valid JSON.
+
+        Current user stats:
+        - Total activity events today: \(stats.totalEvents)
+        - On-task: \(stats.onTaskEvents)/\(stats.totalEvents) (\(stats.onTaskPercent)%), Drift: \(stats.driftEvents), Goofing off: \(stats.goofingOffEvents)
+        - Estimated focus time: \(stats.focusMinutes) min
+        - Sessions today: \(stats.sessionCount)
+        - Longest focus block: \(stats.longestBlockMinutes) min
+        - Top project: \(stats.topProject ?? "none")
+        - Top category: \(stats.topCategory ?? "unknown")
+        - Current session duration: \(stats.currentSessionMinutes.map { "\($0) min" } ?? "no active session")
+        - Time of day: \(stats.timeOfDay)
+        - Minutes since last distraction: \(stats.minutesSinceLastDistraction.map { "\($0)" } ?? "n/a")
+        - Last 10 checks (oldest→newest): \(recentDots.isEmpty ? "no data yet" : recentDots)
+
+        Pick the SINGLE most interesting / motivating card from this list of 20+ concepts. \
+        Vary your choice — do not always default to focus_time. Consider what is most relevant \
+        given the time of day, session state, and recent trend:
+
+        1.  focus_time_today        — total focus minutes today as a big stat
+        2.  on_task_percent         — on-task % as a big stat with trend note in subtitle
+        3.  longest_block           — longest uninterrupted focus block
+        4.  session_count           — number of sessions completed today
+        5.  top_project             — most-worked project + time estimate in subtitle
+        6.  distraction_count       — off-task events; frame positively if low
+        7.  streak_note             — encouraging note about today's consistency
+        8.  quiet_hours             — time since last distraction as a big stat
+        9.  deep_work_time          — time in coding/design/research specifically
+        10. momentum_dots           — last 10 checks as colored dots with a short label
+        11. focus_split_bar         — focus vs drift horizontal bar
+        12. multi_quick             — 3 small stats: focus time, on-task %, sessions
+        13. project_time_pair       — labelValue: top project + time on it
+        14. session_progress        — current session time + intention label in subtitle
+        15. daily_comparison        — compare today's % to a contextual benchmark
+        16. category_highlight      — dominant category today (e.g. "Mostly coding")
+        17. morning_warmup          — if early in day and few events, encourage getting started
+        18. afternoon_check         — if afternoon, summarise morning in a multiStat
+        19. distraction_resilience  — how quickly user returns after going off-task
+        20. focus_quality_bar       — bar split by on-task categories vs off-task
+        21. event_count             — total events with on-task count in subtitle
+        22. best_hour               — most productive recent check as a note
+        23. encouragement           — best stat of the day, warmly framed
+        24. project_split_bar       — time split across top 2 projects (if data exists)
+        25. zero_distractions       — celebrate if distractionCount == 0
+
+        Output format — pick ONE cardType and fill only its fields. Omit unused fields entirely.
+
+        stat:
+        {"cardType":"stat","label":"<3–4 word label>","value":"<concise value>","subtitle":"<optional 1-line note>","accent":"green"|"yellow"|"red"|null}
+
+        multiStat (2–3 items):
+        {"cardType":"multiStat","items":[{"label":"<label>","value":"<value>"},…]}
+
+        barSplit (2–3 segments, ratios must sum to 1.0):
+        {"cardType":"barSplit","barTitle":"<short title>","segments":[{"label":"<l>","ratio":<r>,"color":"green"|"yellow"|"red"|"gray"},…]}
+
+        dotRow (up to 12 dots):
+        {"cardType":"dotRow","dotTitle":"<short title>","dots":["green"|"yellow"|"red"|"gray",…]}
+
+        labelValue (exactly 2 rows):
+        {"cardType":"labelValue","rows":[{"label":"<l>","value":"<v>"},{"label":"<l>","value":"<v>"}]}
+
+        Rules:
+        - All text must be short: labels ≤ 15 chars, values ≤ 10 chars, subtitle ≤ 40 chars.
+        - Use "green" for positive stats, "yellow" for drift/warnings, "red" for goofing-off nudges.
+        - If there is no activity data yet, use concept 17 (morning_warmup) with a stat card.
+        - Return ONLY the JSON object. No explanation, no markdown fences.
+        """
+
+        let messages: [[String: String]] = [
+            ["role": "system", "content": "You output only valid JSON. No prose, no markdown."],
+            ["role": "user", "content": prompt]
+        ]
+
+        let model = live.classificationModel.isEmpty ? live.conversationModel : live.classificationModel
+        guard !model.isEmpty else { throw LLMError.noAPIKey }
+
+        let data = try await makeRequest(
+            model: model, messages: messages, apiKey: apiKey,
+            temperature: 0.7, maxTokens: 200
+        )
+        let response = try JSONDecoder().decode(LLMResponse.self, from: data)
+        guard let content = response.choices.first?.message.content else {
+            throw LLMError.invalidResponse
+        }
+
+        let clean = content
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let jsonData = clean.data(using: .utf8) else { throw LLMError.invalidResponse }
+        return try JSONDecoder().decode(InfographicSpec.self, from: jsonData)
+    }
+
     func extractIntent(from conversationText: String) async throws -> String? {
         let live = liveConfig
         guard let apiKey = try? KeychainHelper.load(key: live.apiKeyIdentifier) else {
@@ -295,13 +404,21 @@ actor LLMProvider {
         do {
             let data = cleanContent.data(using: .utf8) ?? Data()
             let classification = try JSONDecoder().decode(ClassificationData.self, from: data)
-            
+
             let category = URLCategory(rawValue: classification.category) ?? .unknown
-            
+            // Use the category's default status, with the LLM's onTask as a tiebreaker
+            // for unknown categories (where defaultTaskStatus might be wrong).
+            let taskStatus: TaskStatus
+            if category == .unknown {
+                taskStatus = classification.onTask ? .onTask : .goofingOff
+            } else {
+                taskStatus = category.defaultTaskStatus
+            }
+
             return URLClassification(
                 url: url,
                 pageTitle: pageTitle,
-                onTask: classification.onTask,
+                taskStatus: taskStatus,
                 project: classification.project,
                 category: category,
                 confidence: classification.confidence,

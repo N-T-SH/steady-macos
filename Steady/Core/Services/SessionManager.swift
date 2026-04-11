@@ -17,7 +17,6 @@ class SessionManager: ObservableObject {
     private var pauseStartTime: Date?
     private var totalPausedTime: TimeInterval = 0
     private var urlTracker: URLTracker?
-    private let notificationManager = NotificationManager.shared
     private var llmProvider: LLMProvider?
 
     enum SessionState: String, Codable {
@@ -54,14 +53,16 @@ class SessionManager: ObservableObject {
 
     /// Reassign a captured activity to a different project/category.
     /// Updates in-memory log, persists a URL rule, and refreshes the tracker.
-    func reclassify(classificationAt timestamp: Date, project: String, category: URLCategory) {
+    func reclassify(classificationAt timestamp: Date, project: String) {
         guard let idx = allActivityToday.firstIndex(where: { $0.timestamp == timestamp }) else { return }
         let old = allActivityToday[idx]
+        // Effective status: use project's assigned category if available, else keep original
+        let taskStatus = LocalStore.shared.taskStatus(forProject: project) ?? old.taskStatus
         let updated = URLClassification(
             url: old.url, pageTitle: old.pageTitle,
-            onTask: category.isProductive,
+            taskStatus: taskStatus,
             project: project,
-            category: category,
+            category: old.category,
             confidence: 1.0,
             reasoning: "User classified",
             timestamp: old.timestamp
@@ -69,7 +70,7 @@ class SessionManager: ObservableObject {
         allActivityToday[idx] = updated
 
         let ruleKey = old.url.hasPrefix("app://") ? old.url : (URL(string: old.url)?.host ?? old.url)
-        LocalStore.shared.saveURLRule(domain: ruleKey, projectName: project, category: category)
+        LocalStore.shared.saveURLRule(domain: ruleKey, projectName: project, category: old.category)
 
         if let tracker = urlTracker {
             let rules = LocalStore.shared.urlRules
@@ -79,6 +80,15 @@ class SessionManager: ObservableObject {
                 await tracker.updateKnownProjects(projects)
             }
         }
+    }
+
+    func updateProjectConfig() async {
+        guard let tracker = urlTracker else { return }
+        let categories  = LocalStore.shared.projectCategories
+        let assignments = LocalStore.shared.projectAssignments
+        let overrides   = LocalStore.shared.urlCategoryOverrides
+        await tracker.updateProjectCategories(categories, assignments: assignments,
+                                              urlCategoryOverrides: overrides)
     }
 
     // MARK: - Session lifecycle
@@ -117,8 +127,6 @@ class SessionManager: ObservableObject {
             }
         }
 
-        await notificationManager.scheduleSessionStart(intention: intention)
-        await notificationManager.scheduleSessionNudge(session: session, intention: intention)
     }
 
     func pauseSession() async {
@@ -159,13 +167,6 @@ class SessionManager: ObservableObject {
             session.postSessionReflection = reflection
             session.urlClassifications = urlClassifications
             self.activeSession = session
-            if let intention = currentIntention {
-                await notificationManager.sendSessionComplete(session: session, intention: intention)
-            }
-        }
-
-        if let session = activeSession {
-            await notificationManager.clearNotifications(for: session.id)
         }
 
         sessionState = .idle
@@ -184,7 +185,7 @@ class SessionManager: ObservableObject {
         }
     }
 
-    func handleOffTaskClassification(_ classification: URLClassification) async {
+    func handleOffTaskClassification(_ classification: URLClassification) {
         guard sessionState == .active else { return }
 
         if !classification.onTask {
@@ -198,11 +199,6 @@ class SessionManager: ObservableObject {
             if var session = activeSession {
                 session.interruptions.append(distraction)
                 self.activeSession = session
-            }
-
-            switch currentIntention?.strictness ?? .gentle {
-            case .quiet: break
-            default: await notificationManager.sendDriftAlert(classification: classification)
             }
         }
     }
@@ -257,7 +253,7 @@ extension SessionManager: URLTrackerDelegate {
 
     nonisolated func urlTracker(_ tracker: URLTracker, didDetectOffTask classification: URLClassification) {
         Task { @MainActor in
-            await self.handleOffTaskClassification(classification)
+            self.handleOffTaskClassification(classification)
         }
     }
 

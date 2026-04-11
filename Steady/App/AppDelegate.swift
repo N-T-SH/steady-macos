@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -7,6 +8,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var appState = AppState()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Cancel any previously scheduled system notifications (from older app versions)
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+
         setupServices()
 
         menuBarController = MenuBarController()
@@ -14,8 +19,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.setupMenuBar()
 
         NSApp.setActivationPolicy(.accessory)
-
-        setupNotificationObservers()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -43,11 +46,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         sessionManager.configure(llmProvider: llmProvider)
 
         appState.configure(sessionManager: sessionManager, conversationEngine: conversationEngine, llmProvider: llmProvider)
-
-        // Request notification permissions
-        Task {
-            try? await NotificationManager.shared.requestAuthorization()
-        }
 
         // Register global hotkeys
         setupHotkeys()
@@ -81,30 +79,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         manager.registerHotkeys()
     }
 
-    // MARK: - Notification Observers
-
-    private func setupNotificationObservers() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleStartSession(_:)),
-            name: .init("SteadyStartSession"),
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleOpenNotification(_:)),
-            name: .init("SteadyOpenNotification"),
-            object: nil
-        )
-    }
-
-    @objc private func handleStartSession(_ notification: NSNotification) {
-        menuBarController.showPanel()
-    }
-
-    @objc private func handleOpenNotification(_ notification: NSNotification) {
-        menuBarController.showPanel()
-    }
 }
 
 extension Notification.Name {
