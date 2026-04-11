@@ -191,7 +191,8 @@ class AppState: ObservableObject {
 
     // MARK: - Todos
 
-    var activeTodos: [TodoItem] { localStore.todos.filter { !$0.isCompleted } }
+    var activeTodos: [TodoItem] { localStore.todos.filter { !$0.isCompleted && !$0.isStashed } }
+    var completedTodos: [TodoItem] { localStore.todos.filter { $0.isCompleted } }
 
     func addTodo(text: String) {
         let todo = TodoItem(text: text, order: localStore.todos.count)
@@ -207,6 +208,13 @@ class AppState: ObservableObject {
 
     func deleteTodo(id: UUID) {
         localStore.deleteTodo(id)
+    }
+
+    func stashTodo(id: UUID) {
+        guard let idx = localStore.todos.firstIndex(where: { $0.id == id }) else { return }
+        var todo = localStore.todos[idx]
+        todo.stash()
+        localStore.save(todo: todo)
     }
 
     func reorderTodos(from source: IndexSet, to destination: Int) {

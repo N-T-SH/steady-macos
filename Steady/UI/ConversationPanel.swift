@@ -6,7 +6,6 @@ struct ConversationPanel: View {
     @State private var showingActivityLog = false
     @State private var inputText = ""
     @State private var newTodoText = ""
-    @State private var showingTodoAdd = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,7 +67,7 @@ struct ConversationPanel: View {
             }
             messagesList
             Divider()
-            if appState.showTodoPanel || !appState.localStore.todos.isEmpty {
+            if appState.showTodoPanel {
                 todoPanel
                 Divider()
             }
@@ -83,66 +82,61 @@ struct ConversationPanel: View {
     // MARK: - Todo Panel
 
     private var todoPanel: some View {
-        VStack(spacing: 0) {
-            // Add button — no title, flush right
-            HStack {
-                Spacer()
-                Button(action: { withAnimation(.easeInOut(duration: 0.15)) { showingTodoAdd.toggle() } }) {
-                    Image(systemName: showingTodoAdd ? "xmark" : "plus")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .help(showingTodoAdd ? "Cancel" : "Add intention")
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+        let active = appState.activeTodos
+        let done = appState.completedTodos
+        let totalRows = active.count + (done.isEmpty ? 0 : done.count + 1) + 1  // +1 new-item row, +1 done header
+        let rowH: CGFloat = 26
+        let maxH: CGFloat = 180
 
-            // Quick-add field
-            if showingTodoAdd {
-                HStack(spacing: 6) {
-                    TextField("Add intention…", text: $newTodoText)
+        return ScrollView {
+            VStack(spacing: 0) {
+                // Active items
+                ForEach(active) { todo in
+                    ActiveTodoRow(
+                        todo: todo,
+                        onToggle: { appState.toggleTodo(id: todo.id) },
+                        onStash:  { appState.stashTodo(id: todo.id) }
+                    )
+                }
+
+                // Inline new-item row
+                HStack(spacing: 8) {
+                    Image(systemName: "circle")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary.opacity(0.35))
+                    TextField("New item…", text: $newTodoText)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.system(size: 12))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(NSColor.controlBackgroundColor)))
+                        .foregroundColor(.primary)
                         .onSubmit { commitNewTodo() }
-                    Button(action: commitNewTodo) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(newTodoText.trimmingCharacters(in: .whitespaces).isEmpty ? .gray : .accentColor)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .disabled(newTodoText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 5)
-            }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
 
-            // Todo list with drag reorder
-            if !appState.localStore.todos.isEmpty {
-                List {
-                    ForEach(appState.localStore.todos) { todo in
-                        TodoRow(
-                            todo: todo,
-                            onToggle: { appState.toggleTodo(id: todo.id) },
-                            onDelete: { appState.deleteTodo(id: todo.id) }
-                        )
-                        .listRowInsets(EdgeInsets(top: 1, leading: 8, bottom: 1, trailing: 8))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
+                // Done section
+                if !done.isEmpty {
+                    Divider().padding(.horizontal, 14).padding(.vertical, 3)
+                    HStack {
+                        Text("Done")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
                     }
-                    .onMove { appState.reorderTodos(from: $0, to: $1) }
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 2)
+
+                    ForEach(done) { todo in
+                        DoneTodoRow(
+                            todo: todo,
+                            onRemove: { appState.deleteTodo(id: todo.id) }
+                        )
+                    }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .frame(height: min(CGFloat(appState.localStore.todos.count) * 28 + 4, 148))
             }
+            .padding(.vertical, 6)
         }
+        .frame(height: min(CGFloat(totalRows) * rowH + 20, maxH))
         .background(Color.accentColor.opacity(0.04))
-        .padding(.bottom, 4)
     }
 
     private func commitNewTodo() {
@@ -150,46 +144,44 @@ struct ConversationPanel: View {
         guard !text.isEmpty else { return }
         appState.addTodo(text: text)
         newTodoText = ""
-        showingTodoAdd = false
     }
 
     // MARK: - Timer Bar
 
     private var timerBar: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 0) {
             ForEach(appState.activeTimers) { timer in
-                HStack(spacing: 7) {
+                HStack(spacing: 8) {
                     Circle()
                         .fill(Color.orange.opacity(timer.isNudge ? 0.5 : 1.0))
                         .frame(width: 5, height: 5)
                     Text(timer.label)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(timer.isNudge ? .secondary : .primary)
                         .lineLimit(1)
                     Spacer()
                     if timer.isNudge {
-                        // No countdown — just a calm target time
                         Text("checking in \(timer.formattedTargetTime)")
-                            .font(.system(size: 10))
+                            .font(.system(size: 11))
                             .foregroundColor(.secondary.opacity(0.8))
                             .italic()
                     } else {
                         Text(timer.endsAt, style: .timer)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(.orange)
                             .monospacedDigit()
                     }
                     Button(action: { appState.removeTimer(id: timer.id) }) {
                         Image(systemName: "xmark")
-                            .font(.system(size: 9))
-                            .foregroundColor(.secondary.opacity(0.5))
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.45))
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 7)
         .background(Color.orange.opacity(0.05))
     }
 
@@ -254,18 +246,19 @@ struct ConversationPanel: View {
 
     private var inputArea: some View {
         HStack(spacing: 8) {
-            // Todo toggle button — left edge
+            // Todo toggle button — always a radio circle
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     appState.showTodoPanel.toggle()
-                    if !appState.showTodoPanel { showingTodoAdd = false }
                 }
             }) {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: appState.showTodoPanel ? "checklist" : "circle")
+                    Image(systemName: "circle")
                         .font(.title2)
-                        .foregroundColor(appState.showTodoPanel ? .accentColor : (appState.activeTodos.isEmpty ? .gray : .accentColor))
-                    if !appState.activeTodos.isEmpty {
+                        .foregroundColor(appState.showTodoPanel
+                            ? .secondary.opacity(0.5)
+                            : (appState.activeTodos.isEmpty ? .secondary.opacity(0.5) : .accentColor))
+                    if !appState.showTodoPanel && !appState.activeTodos.isEmpty {
                         Text("\(appState.activeTodos.count)")
                             .font(.system(size: 7, weight: .bold))
                             .foregroundColor(.white)
@@ -304,38 +297,70 @@ struct ConversationPanel: View {
     }
 }
 
-// MARK: - Todo Row
+// MARK: - Todo Rows
 
-private struct TodoRow: View {
+private struct ActiveTodoRow: View {
     let todo: TodoItem
     let onToggle: () -> Void
-    let onDelete: () -> Void
+    let onStash: () -> Void
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 8) {
             Button(action: onToggle) {
-                Image(systemName: todo.isCompleted ? "checkmark.circle.fill" : "circle")
+                Image(systemName: "circle")
                     .font(.system(size: 13))
-                    .foregroundColor(todo.isCompleted ? .secondary : .accentColor)
+                    .foregroundColor(.accentColor)
             }
             .buttonStyle(PlainButtonStyle())
 
             Text(todo.text)
                 .font(.system(size: 12))
-                .foregroundColor(todo.isCompleted ? .secondary : .primary)
-                .strikethrough(todo.isCompleted, color: .secondary)
+                .foregroundColor(.primary)
                 .lineLimit(2)
 
             Spacer()
 
-            Button(action: onDelete) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9))
-                    .foregroundColor(.secondary.opacity(0.4))
+            Button(action: onStash) {
+                Image(systemName: "forward")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.45))
             }
             .buttonStyle(PlainButtonStyle())
+            .help("Stash for later")
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct DoneTodoRow: View {
+    let todo: TodoItem
+    let onRemove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary.opacity(0.45))
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary.opacity(0.5))
+
+            Text(todo.text)
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .strikethrough(true, color: .secondary)
+                .lineLimit(2)
+
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 }
