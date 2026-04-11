@@ -20,6 +20,7 @@ class AppState: ObservableObject {
     let localStore: LocalStore = .shared
 
     private var cancellables = Set<AnyCancellable>()
+    private var tickTimer: Timer?
 
     init() {
         $isPanelVisible
@@ -129,17 +130,33 @@ class AppState: ObservableObject {
     func addTimer(label: String, minutes: Int, isNudge: Bool = false) {
         let t = FocusTimer(label: label, endsAt: Date().addingTimeInterval(TimeInterval(minutes * 60)), isNudge: isNudge)
         activeTimers.append(t)
+        startTickTimerIfNeeded()
     }
 
     func removeTimer(id: UUID) {
         activeTimers.removeAll { $0.id == id }
+        if activeTimers.isEmpty { stopTickTimer() }
     }
 
-    /// Called every second from the UI's TimelineView to fire expired timers.
-    func tickTimers() {
+    private func startTickTimerIfNeeded() {
+        guard tickTimer == nil else { return }
+        let t = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.tickTimers() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        tickTimer = t
+    }
+
+    private func stopTickTimer() {
+        tickTimer?.invalidate()
+        tickTimer = nil
+    }
+
+    private func tickTimers() {
         let expired = activeTimers.filter { $0.isExpired }
         guard !expired.isEmpty else { return }
         activeTimers.removeAll { $0.isExpired }
+        if activeTimers.isEmpty { stopTickTimer() }
         for t in expired {
             let message = t.isNudge
                 ? "Hey — \(t.label). How's it going?"

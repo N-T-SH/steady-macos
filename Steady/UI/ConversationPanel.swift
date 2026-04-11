@@ -133,43 +133,41 @@ struct ConversationPanel: View {
     // MARK: - Timer Bar
 
     private var timerBar: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let _ = appState.tickTimers()
-            VStack(spacing: 3) {
-                ForEach(appState.activeTimers) { timer in
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(Color.orange.opacity(timer.isNudge ? 0.5 : 1.0))
-                            .frame(width: 5, height: 5)
-                        Text(timer.label)
-                            .font(.system(size: 11))
-                            .foregroundColor(timer.isNudge ? .secondary : .primary)
-                            .lineLimit(1)
-                        Spacer()
-                        if timer.isNudge {
-                            // No countdown — just a calm target time
-                            Text("checking in \(timer.formattedTargetTime)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary.opacity(0.8))
-                                .italic()
-                        } else {
-                            Text(timer.formattedRemaining)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.orange)
-                        }
-                        Button(action: { appState.removeTimer(id: timer.id) }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
-                        .buttonStyle(PlainButtonStyle())
+        VStack(spacing: 3) {
+            ForEach(appState.activeTimers) { timer in
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(Color.orange.opacity(timer.isNudge ? 0.5 : 1.0))
+                        .frame(width: 5, height: 5)
+                    Text(timer.label)
+                        .font(.system(size: 11))
+                        .foregroundColor(timer.isNudge ? .secondary : .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    if timer.isNudge {
+                        // No countdown — just a calm target time
+                        Text("checking in \(timer.formattedTargetTime)")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .italic()
+                    } else {
+                        Text(timer.endsAt, style: .timer)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.orange)
+                            .monospacedDigit()
                     }
+                    Button(action: { appState.removeTimer(id: timer.id) }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary.opacity(0.5))
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background(Color.orange.opacity(0.05))
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .background(Color.orange.opacity(0.05))
     }
 
     // MARK: - Session Controls
