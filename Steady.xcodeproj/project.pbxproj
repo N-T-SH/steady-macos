@@ -34,6 +34,7 @@
 		00000000000000000000001A /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011A /* PreferencesView.swift */; };
 		00000000000000000000001B /* URLRule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011B /* URLRule.swift */; };
 		00000000000000000000001C /* ClassificationManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011C /* ClassificationManagerView.swift */; };
+		00000000000000000000001D /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011D /* TodoItem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +76,7 @@
 		00000000000000000000011A /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		00000000000000000000011B /* URLRule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLRule.swift; sourceTree = "<group>"; };
 		00000000000000000000011C /* ClassificationManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassificationManagerView.swift; sourceTree = "<group>"; };
+		00000000000000000000011D /* TodoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoItem.swift; sourceTree = "<group>"; };
 		000000000000000000000200 /* SteadyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SteadyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -167,6 +169,7 @@
 				000000000000000000000107 /* URLClassification.swift */,
 				000000000000000000000108 /* LLMConfig.swift */,
 				00000000000000000000011B /* URLRule.swift */,
+				00000000000000000000011D /* TodoItem.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -325,6 +328,7 @@
 				00000000000000000000001A /* PreferencesView.swift in Sources */,
 				00000000000000000000001B /* URLRule.swift in Sources */,
 				00000000000000000000001C /* ClassificationManagerView.swift in Sources */,
+				00000000000000000000001D /* TodoItem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -13,6 +13,7 @@ class AppState: ObservableObject {
     @Published var sessionHistory: [Session] = []
     @Published var isMenuBarIconActive: Bool = false
     @Published var activeTimers: [FocusTimer] = []
+    @Published var showTodoPanel: Bool = false
 
     var sessionManager: SessionManager?
     var conversationEngine: ConversationEngine?
@@ -151,6 +152,49 @@ class AppState: ObservableObject {
         NotificationCenter.default.post(name: .focusTimerExpired, object: nil)
     }
 
+    // MARK: - Todos
+
+    var activeTodos: [TodoItem] { localStore.todos.filter { !$0.isCompleted } }
+
+    func addTodo(text: String) {
+        let todo = TodoItem(text: text, order: localStore.todos.count)
+        localStore.save(todo: todo)
+    }
+
+    func toggleTodo(id: UUID) {
+        guard let idx = localStore.todos.firstIndex(where: { $0.id == id }) else { return }
+        var todo = localStore.todos[idx]
+        if todo.isCompleted { todo.uncomplete() } else { todo.complete() }
+        localStore.save(todo: todo)
+    }
+
+    func deleteTodo(id: UUID) {
+        localStore.deleteTodo(id)
+    }
+
+    func reorderTodos(from source: IndexSet, to destination: Int) {
+        localStore.reorderTodos(from: source, to: destination)
+    }
+
+    /// Scans an AI response for [TODO:text] tags, adds the task, and returns the cleaned response.
+    /// Returns true in the second value if a TODO was found (so the panel can auto-open).
+    func processTodoTag(in response: String) -> (String, Bool) {
+        var result = response
+        let todoPattern = #"\[TODO:([^\]]+)\]"#
+        guard let range = result.range(of: todoPattern, options: .regularExpression) else {
+            return (result, false)
+        }
+        let tag = String(result[range])
+        // "[TODO:" is 6 characters; strip bracket wrapper
+        let text = String(tag.dropFirst(6).dropLast()).trimmingCharacters(in: .whitespaces)
+        if !text.isEmpty { addTodo(text: text) }
+        result = result.replacingCharacters(in: range, with: "")
+                       .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (result, !text.isEmpty)
+    }
+
+    // MARK: - Timer tags
+
     /// Scans an AI response for [TIMER:Xm:label] or [NUDGE:Xm:label] tags.
     /// Strips the tag from the displayed text and schedules the appropriate timer.
     func processTimerTag(in response: String) -> String {
@@ -182,7 +226,8 @@ class AppState: ObservableObject {
             session: sessionWithLiveData,
             driftDuration: nil,
             classification: recentClassification,
-            recentActivity: recentActivity
+            recentActivity: recentActivity,
+            activeTodos: activeTodos
         )
         addConversationTurn(ConversationTurn(timestamp: Date(), role: .user, content: content, context: context))
 
@@ -197,7 +242,9 @@ class AppState: ObservableObject {
                 return
             }
             let rawResponse = await engine.continueConversation(userMessage: content, context: context)
-            let response = processTimerTag(in: rawResponse)
+            let timerProcessed = processTimerTag(in: rawResponse)
+            let (response, addedTodo) = processTodoTag(in: timerProcessed)
+            if addedTodo { showTodoPanel = true }
             addConversationTurn(ConversationTurn(timestamp: Date(), role: .assistant, content: response, context: context))
 
             if sessionManager?.sessionState == .idle {

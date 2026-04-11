@@ -27,18 +27,22 @@ struct ConversationContext: Codable, Equatable {
     let classification: URLClassification?
     /// Actual captured activity to show the LLM — never fabricate beyond this list.
     var recentActivity: [URLClassification]
+    /// Active (incomplete) todos — used for on-task classification and task detection.
+    var activeTodos: [TodoItem]
 
     init(
         intention: Intention?,
         session: Session?,
         driftDuration: TimeInterval?,
         classification: URLClassification?,
-        recentActivity: [URLClassification] = []
+        recentActivity: [URLClassification] = [],
+        activeTodos: [TodoItem] = []
     ) {
         self.intention = intention
         self.session = session
         self.driftDuration = driftDuration
         self.classification = classification
         self.recentActivity = recentActivity
+        self.activeTodos = activeTodos
     }
 }

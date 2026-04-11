@@ -9,10 +9,12 @@ class LocalStore: ObservableObject {
     @Published var intentions: [Intention] = []
     @Published var sessions: [Session] = []
     @Published var urlRules: [URLRule] = []
+    @Published var todos: [TodoItem] = []
 
     private let intentionsURL: URL
     private let sessionsURL: URL
     private let urlRulesURL: URL
+    private let todosURL: URL
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -21,6 +23,7 @@ class LocalStore: ObservableObject {
         intentionsURL = dir.appendingPathComponent("intentions.json")
         sessionsURL   = dir.appendingPathComponent("sessions.json")
         urlRulesURL   = dir.appendingPathComponent("url_rules.json")
+        todosURL      = dir.appendingPathComponent("todos.json")
         load()
     }
 
@@ -86,6 +89,28 @@ class LocalStore: ObservableObject {
         persist(urlRules, to: urlRulesURL)
     }
 
+    // MARK: - Todos
+
+    func save(todo: TodoItem) {
+        if let idx = todos.firstIndex(where: { $0.id == todo.id }) {
+            todos[idx] = todo
+        } else {
+            todos.append(todo)
+        }
+        persist(todos, to: todosURL)
+    }
+
+    func deleteTodo(_ id: UUID) {
+        todos.removeAll { $0.id == id }
+        persist(todos, to: todosURL)
+    }
+
+    func reorderTodos(from source: IndexSet, to destination: Int) {
+        todos.move(fromOffsets: source, toOffset: destination)
+        for i in todos.indices { todos[i].order = i }
+        persist(todos, to: todosURL)
+    }
+
     /// All unique project names across intentions and URL rules.
     var allProjectNames: [String] {
         let fromIntentions = intentions.map { $0.task }
@@ -133,6 +158,9 @@ class LocalStore: ObservableObject {
         }
         if let data = try? Data(contentsOf: urlRulesURL) {
             urlRules = (try? JSONDecoder().decode([URLRule].self, from: data)) ?? []
+        }
+        if let data = try? Data(contentsOf: todosURL) {
+            todos = (try? JSONDecoder().decode([TodoItem].self, from: data)) ?? []
         }
     }
 
