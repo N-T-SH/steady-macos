@@ -10,20 +10,31 @@ class LocalStore: ObservableObject {
     @Published var sessions: [Session] = []
     @Published var urlRules: [URLRule] = []
     @Published var todos: [TodoItem] = []
+    @Published var projectCategories: [ProjectCategory] = []
+    /// Maps project name → category name.
+    @Published var projectAssignments: [String: String] = [:]
+    /// User overrides for auto-generated URLCategory statuses (rawValue → TaskStatus).
+    @Published var urlCategoryOverrides: [String: TaskStatus] = [:]
 
     private let intentionsURL: URL
     private let sessionsURL: URL
     private let urlRulesURL: URL
     private let todosURL: URL
+    private let projectCategoriesURL: URL
+    private let projectAssignmentsURL: URL
+    private let urlCategoryOverridesURL: URL
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = appSupport.appendingPathComponent("Steady", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        intentionsURL = dir.appendingPathComponent("intentions.json")
-        sessionsURL   = dir.appendingPathComponent("sessions.json")
-        urlRulesURL   = dir.appendingPathComponent("url_rules.json")
-        todosURL      = dir.appendingPathComponent("todos.json")
+        intentionsURL           = dir.appendingPathComponent("intentions.json")
+        sessionsURL             = dir.appendingPathComponent("sessions.json")
+        urlRulesURL             = dir.appendingPathComponent("url_rules.json")
+        todosURL                = dir.appendingPathComponent("todos.json")
+        projectCategoriesURL    = dir.appendingPathComponent("project_categories.json")
+        projectAssignmentsURL   = dir.appendingPathComponent("project_assignments.json")
+        urlCategoryOverridesURL = dir.appendingPathComponent("url_category_overrides.json")
         load()
     }
 
@@ -111,6 +122,63 @@ class LocalStore: ObservableObject {
         persist(todos, to: todosURL)
     }
 
+    // MARK: - Project Categories
+
+    func save(projectCategory: ProjectCategory) {
+        if let idx = projectCategories.firstIndex(where: { $0.id == projectCategory.id }) {
+            projectCategories[idx] = projectCategory
+        } else {
+            projectCategories.append(projectCategory)
+        }
+        persist(projectCategories, to: projectCategoriesURL)
+    }
+
+    func deleteProjectCategory(id: UUID) {
+        guard let cat = projectCategories.first(where: { $0.id == id }) else { return }
+        // Clear assignments pointing to this category
+        for (project, catName) in projectAssignments where catName == cat.name {
+            projectAssignments.removeValue(forKey: project)
+        }
+        projectCategories.removeAll { $0.id == id }
+        persist(projectCategories, to: projectCategoriesURL)
+        persist(projectAssignments, to: projectAssignmentsURL)
+    }
+
+    func assignCategory(toProject project: String, categoryName: String?) {
+        if let name = categoryName {
+            projectAssignments[project] = name
+        } else {
+            projectAssignments.removeValue(forKey: project)
+        }
+        persist(projectAssignments, to: projectAssignmentsURL)
+    }
+
+    /// Effective TaskStatus for a project, falling back to nil when unassigned.
+    /// Resolution order: custom category name → URLCategory rawValue → nil.
+    func taskStatus(forProject project: String) -> TaskStatus? {
+        guard let catName = projectAssignments[project] else { return nil }
+        if let cat = projectCategories.first(where: { $0.name == catName }) {
+            return cat.status
+        }
+        if let urlCat = URLCategory(rawValue: catName) {
+            return effectiveStatus(for: urlCat)
+        }
+        return nil
+    }
+
+    // MARK: - URL Category Overrides
+
+    /// Override the default TaskStatus for an auto-generated URLCategory.
+    func setURLCategoryOverride(_ category: URLCategory, status: TaskStatus) {
+        urlCategoryOverrides[category.rawValue] = status
+        persist(urlCategoryOverrides, to: urlCategoryOverridesURL)
+    }
+
+    /// Effective TaskStatus for a URLCategory, respecting any user override.
+    func effectiveStatus(for urlCategory: URLCategory) -> TaskStatus {
+        urlCategoryOverrides[urlCategory.rawValue] ?? urlCategory.defaultTaskStatus
+    }
+
     /// All unique project names across intentions and URL rules.
     var allProjectNames: [String] {
         let fromIntentions = intentions.map { $0.task }
@@ -161,6 +229,15 @@ class LocalStore: ObservableObject {
         }
         if let data = try? Data(contentsOf: todosURL) {
             todos = (try? JSONDecoder().decode([TodoItem].self, from: data)) ?? []
+        }
+        if let data = try? Data(contentsOf: projectCategoriesURL) {
+            projectCategories = (try? JSONDecoder().decode([ProjectCategory].self, from: data)) ?? []
+        }
+        if let data = try? Data(contentsOf: projectAssignmentsURL) {
+            projectAssignments = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        }
+        if let data = try? Data(contentsOf: urlCategoryOverridesURL) {
+            urlCategoryOverrides = (try? JSONDecoder().decode([String: TaskStatus].self, from: data)) ?? [:]
         }
     }
 

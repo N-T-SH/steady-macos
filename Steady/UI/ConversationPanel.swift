@@ -3,7 +3,6 @@ import SwiftUI
 struct ConversationPanel: View {
     @ObservedObject var appState: AppState
     @State private var showingSettings = false
-    @State private var showingClassificationManager = false
     @State private var showingActivityLog = false
     @State private var inputText = ""
     @State private var newTodoText = ""
@@ -16,102 +15,47 @@ struct ConversationPanel: View {
 
             if showingSettings {
                 InlineSettingsView(isPresented: $showingSettings)
+            } else if showingActivityLog {
+                ActivityLogView(appState: appState, isPresented: $showingActivityLog)
             } else {
                 chatView
             }
         }
         .background(Color(NSColor.windowBackgroundColor))
         .onAppear { appState.panelDidOpen() }
-        .sheet(isPresented: $showingClassificationManager) {
-            ClassificationManagerView(localStore: appState.localStore)
-        }
-        .sheet(isPresented: $showingActivityLog) {
-            ActivityLogView(appState: appState)
-        }
     }
 
     // MARK: - Header
 
     private var panelHeader: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.title2)
-                .foregroundColor(.accentColor)
+            InfographicCardView(spec: appState.currentInfographic, appState: appState)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Steady")
-                    .font(.headline)
-                Text(headerSubtitle)
-                    .font(.caption)
-                    .foregroundColor(headerSubtitleColor)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Button(action: { showingActivityLog = true }) {
-                Image(systemName: "list.bullet.rectangle")
-                    .font(.body)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showingActivityLog.toggle()
+                    if showingActivityLog { showingSettings = false }
+                }
+            }) {
+                Image(systemName: showingActivityLog ? "xmark.circle" : "list.bullet.rectangle").font(.body)
             }
             .buttonStyle(PlainButtonStyle())
-            .help("Activity Log")
+            .help(showingActivityLog ? "Close activity log" : "Activity Log")
 
-            Button(action: { showingClassificationManager = true }) {
-                Image(systemName: "calendar")
-                    .font(.body)
-            }
-            .buttonStyle(PlainButtonStyle())
-            .help("Site Classifications")
-
-            Button(action: { withAnimation(.easeInOut(duration: 0.2)) { showingSettings.toggle() } }) {
-                Image(systemName: showingSettings ? "xmark.circle" : "gear")
-                    .font(.body)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showingSettings.toggle()
+                    if showingSettings { showingActivityLog = false }
+                }
+            }) {
+                Image(systemName: showingSettings ? "xmark.circle" : "gear").font(.body)
             }
             .buttonStyle(PlainButtonStyle())
             .help(showingSettings ? "Close settings" : "Settings")
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-    }
-
-    private var headerSubtitle: String {
-        guard let sm = appState.sessionManager else { return "Ready to focus" }
-        switch sm.sessionState {
-        case .active:
-            if let last = sm.allActivityToday.last {
-                return last.onTask ? "Working — \(last.project ?? last.category.displayName)" : "Off track"
-            }
-            return "Working"
-        case .paused:
-            return "Paused"
-        case .ending:
-            return "Wrapping up…"
-        case .idle:
-            if let last = sm.allActivityToday.last {
-                return last.category.isProductive
-                    ? (last.project ?? last.category.displayName)
-                    : "Goofing off"
-            }
-            return sm.activityWatchConnected == true ? "Tracking activity" : "ActivityWatch not connected"
-        }
-    }
-
-    private var headerSubtitleColor: Color {
-        guard let sm = appState.sessionManager else { return .secondary }
-        switch sm.sessionState {
-        case .active:
-            if let last = sm.allActivityToday.last { return last.onTask ? .green : .orange }
-            return .secondary
-        case .paused:
-            return .orange
-        case .idle:
-            if let last = sm.allActivityToday.last {
-                return last.category.isProductive ? .green : .orange
-            }
-            return sm.activityWatchConnected == true ? .secondary : .orange
-        default:
-            return .secondary
-        }
+        .padding(.vertical, 10)
     }
 
     // MARK: - Chat View
@@ -212,43 +156,41 @@ struct ConversationPanel: View {
     // MARK: - Timer Bar
 
     private var timerBar: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { _ in
-            let _ = appState.tickTimers()
-            VStack(spacing: 3) {
-                ForEach(appState.activeTimers) { timer in
-                    HStack(spacing: 7) {
-                        Circle()
-                            .fill(Color.orange.opacity(timer.isNudge ? 0.5 : 1.0))
-                            .frame(width: 5, height: 5)
-                        Text(timer.label)
-                            .font(.system(size: 11))
-                            .foregroundColor(timer.isNudge ? .secondary : .primary)
-                            .lineLimit(1)
-                        Spacer()
-                        if timer.isNudge {
-                            // No countdown — just a calm target time
-                            Text("checking in \(timer.formattedTargetTime)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary.opacity(0.8))
-                                .italic()
-                        } else {
-                            Text(timer.formattedRemaining)
-                                .font(.system(size: 11, design: .monospaced))
-                                .foregroundColor(.orange)
-                        }
-                        Button(action: { appState.removeTimer(id: timer.id) }) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 9))
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
-                        .buttonStyle(PlainButtonStyle())
+        VStack(spacing: 3) {
+            ForEach(appState.activeTimers) { timer in
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(Color.orange.opacity(timer.isNudge ? 0.5 : 1.0))
+                        .frame(width: 5, height: 5)
+                    Text(timer.label)
+                        .font(.system(size: 11))
+                        .foregroundColor(timer.isNudge ? .secondary : .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    if timer.isNudge {
+                        // No countdown — just a calm target time
+                        Text("checking in \(timer.formattedTargetTime)")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .italic()
+                    } else {
+                        Text(timer.endsAt, style: .timer)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.orange)
+                            .monospacedDigit()
                     }
+                    Button(action: { appState.removeTimer(id: timer.id) }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary.opacity(0.5))
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background(Color.orange.opacity(0.05))
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .background(Color.orange.opacity(0.05))
     }
 
     // MARK: - Session Controls
@@ -426,25 +368,18 @@ struct MessageBubble: View {
 
 struct ActivityLogView: View {
     @ObservedObject var appState: AppState
-    @Environment(\.dismiss) private var dismiss
+    @Binding var isPresented: Bool
 
     @State private var filterProject: String = "All"
 
     private var sm: SessionManager? { appState.sessionManager }
 
-    private static let ts: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
-    }()
-
-    private var allActivity: [URLClassification] {
-        sm?.allActivityToday ?? []
-    }
+    private var allActivity: [URLClassification] { sm?.allActivityToday ?? [] }
 
     private var knownProjects: [String] {
-        let fromRules = appState.localStore.urlRules.map { $0.projectName }
         let fromIntentions = appState.localStore.intentions.map { $0.task }
-        let fromActivity = allActivity.compactMap { $0.project }
-        return Array(Set(fromRules + fromIntentions + fromActivity))
+        let fromActivity   = allActivity.compactMap { $0.project }
+        return Array(Set(fromIntentions + fromActivity))
             .filter { !$0.isEmpty }.sorted()
     }
 
@@ -455,24 +390,11 @@ struct ActivityLogView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                Text("Activity Log")
-                    .font(.headline)
-                Spacer()
-                Button(action: { dismiss() }) {
-                    Image(systemName: "xmark.circle").font(.body)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            .padding(.horizontal, 16).padding(.vertical, 12)
-            Divider()
-
             // Status bar
             HStack(spacing: 12) {
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(sm?.activityWatchConnected == true ? Color.green : Color.orange)
+                        .fill(sm?.activityWatchConnected == true ? Color.green : Color.yellow)
                         .frame(width: 7, height: 7)
                     Text(sm?.activityWatchConnected == true ? "ActivityWatch connected" : "ActivityWatch not connected")
                         .font(.system(size: 11))
@@ -494,61 +416,62 @@ struct ActivityLogView: View {
                         .font(.system(size: 11)).foregroundColor(.secondary)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
-                .background(Color.orange.opacity(0.07))
+                .background(Color.yellow.opacity(0.07))
             }
 
             Divider()
+            activityTab
+        }
+    }
 
-            // Project filter
-            if !knownProjects.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        FilterChip(label: "All", selected: filterProject == "All") {
-                            filterProject = "All"
-                        }
-                        ForEach(knownProjects, id: \.self) { p in
-                            FilterChip(label: p, selected: filterProject == p) {
-                                filterProject = p
-                            }
-                        }
+    // MARK: - Activity Tab
+
+    @ViewBuilder
+    private var activityTab: some View {
+        // Project filter chips
+        if !knownProjects.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    FilterChip(label: "All", selected: filterProject == "All") { filterProject = "All" }
+                    ForEach(knownProjects, id: \.self) { p in
+                        FilterChip(label: p, selected: filterProject == p) { filterProject = p }
                     }
-                    .padding(.horizontal, 12).padding(.vertical, 6)
                 }
-                Divider()
+                .padding(.horizontal, 12).padding(.vertical, 6)
             }
+            Divider()
+        }
 
-            // Activity list
-            if filteredActivity.isEmpty {
-                VStack(spacing: 8) {
-                    Text(allActivity.isEmpty ? "No activity captured yet" : "No activity for this project")
-                        .font(.headline).foregroundColor(.secondary)
-                    if allActivity.isEmpty {
-                        Text("Browse in Chrome with ActivityWatch running\nand events will appear here within ~10s")
-                            .font(.system(size: 11)).foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+        if filteredActivity.isEmpty {
+            VStack(spacing: 8) {
+                Text(allActivity.isEmpty ? "No activity captured yet" : "No activity for this project")
+                    .font(.headline).foregroundColor(.secondary)
+                if allActivity.isEmpty {
+                    Text("Browse with ActivityWatch running\nand events will appear here within ~10s")
+                        .font(.system(size: 11)).foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(24)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(filteredActivity.reversed().enumerated()), id: \.offset) { _, c in
+                        ActivityLogRow(
+                            classification: c,
+                            knownProjects: knownProjects,
+                            onReclassify: { project in
+                                sm?.reclassify(classificationAt: c.timestamp, project: project)
+                            }
+                        )
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(24)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(Array(filteredActivity.reversed().enumerated()), id: \.offset) { _, c in
-                            ActivityLogRow(
-                                classification: c,
-                                knownProjects: knownProjects,
-                                onReclassify: { project, category in
-                                    sm?.reclassify(classificationAt: c.timestamp, project: project, category: category)
-                                }
-                            )
-                        }
-                    }
-                    .padding(.vertical, 6)
-                }
+                .padding(.vertical, 6)
             }
         }
-        .frame(width: 520, height: 580)
     }
+
 }
 
 // MARK: - Filter Chip
@@ -574,11 +497,30 @@ private struct FilterChip: View {
 // MARK: - Activity Log Row
 
 private struct ActivityLogRow: View {
+    @ObservedObject private var store = LocalStore.shared
     let classification: URLClassification
     let knownProjects: [String]
-    let onReclassify: (String, URLCategory) -> Void
+    let onReclassify: (String) -> Void
 
     @State private var showingProjectPicker = false
+
+    /// Effective status mirrors URLTracker's 3-level priority chain.
+    private var displayStatus: TaskStatus {
+        if let project = classification.project,
+           let catName = store.projectAssignments[project],
+           let cat = store.projectCategories.first(where: { $0.name == catName }) {
+            return cat.status
+        }
+        return store.urlCategoryOverrides[classification.category.rawValue] ?? classification.taskStatus
+    }
+
+    private func dotColor(for status: TaskStatus) -> Color {
+        switch status {
+        case .onTask:     return .green
+        case .drift:      return .yellow
+        case .goofingOff: return .red
+        }
+    }
 
     private static let ts: DateFormatter = {
         let f = DateFormatter(); f.dateFormat = "HH:mm:ss"; return f
@@ -606,7 +548,7 @@ private struct ActivityLogRow: View {
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(.secondary)
                 Circle()
-                    .fill(classification.category.isProductive ? Color.green.opacity(0.8) : Color.orange.opacity(0.8))
+                    .fill(dotColor(for: displayStatus).opacity(0.85))
                     .frame(width: 6, height: 6)
                     .padding(.top, 2)
             }
@@ -648,10 +590,9 @@ private struct ActivityLogRow: View {
             .popover(isPresented: $showingProjectPicker, arrowEdge: .trailing) {
                 ProjectPickerPopover(
                     currentProject: classification.project,
-                    currentCategory: classification.category,
                     knownProjects: knownProjects,
-                    onSelect: { project, category in
-                        onReclassify(project, category)
+                    onSelect: { project in
+                        onReclassify(project)
                         showingProjectPicker = false
                     }
                 )
@@ -667,21 +608,28 @@ private struct ActivityLogRow: View {
 // MARK: - Project Picker Popover
 
 private struct ProjectPickerPopover: View {
+    @ObservedObject private var store = LocalStore.shared
     let currentProject: String?
-    let currentCategory: URLCategory
     let knownProjects: [String]
-    let onSelect: (String, URLCategory) -> Void
+    let onSelect: (String) -> Void
 
     @State private var newProjectName: String = ""
-    @State private var selectedCategory: URLCategory
     @FocusState private var newProjectFocused: Bool
 
-    init(currentProject: String?, currentCategory: URLCategory, knownProjects: [String], onSelect: @escaping (String, URLCategory) -> Void) {
-        self.currentProject = currentProject
-        self.currentCategory = currentCategory
-        self.knownProjects = knownProjects
-        self.onSelect = onSelect
-        _selectedCategory = State(initialValue: currentCategory)
+    private func categoryLabel(for project: String) -> String {
+        guard let catName = store.projectAssignments[project],
+              let cat = store.projectCategories.first(where: { $0.name == catName }) else { return "" }
+        return cat.name
+    }
+
+    private func categoryColor(for project: String) -> Color? {
+        guard let catName = store.projectAssignments[project],
+              let cat = store.projectCategories.first(where: { $0.name == catName }) else { return nil }
+        switch cat.status {
+        case .onTask:     return .green
+        case .drift:      return .yellow
+        case .goofingOff: return .red
+        }
     }
 
     var body: some View {
@@ -695,8 +643,11 @@ private struct ProjectPickerPopover: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(knownProjects, id: \.self) { project in
-                            Button(action: { onSelect(project, currentCategory) }) {
-                                HStack {
+                            Button(action: { onSelect(project) }) {
+                                HStack(spacing: 6) {
+                                    if let color = categoryColor(for: project) {
+                                        Circle().fill(color).frame(width: 6, height: 6)
+                                    }
                                     Text(project)
                                         .font(.system(size: 12))
                                         .foregroundColor(.primary)
@@ -729,16 +680,13 @@ private struct ProjectPickerPopover: View {
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .font(.system(size: 12))
                     .focused($newProjectFocused)
-                Picker("Category", selection: $selectedCategory) {
-                    ForEach(URLCategory.allCases.filter { $0 != .unknown }, id: \.self) { cat in
-                        Text(cat.displayName.isEmpty ? cat.rawValue : cat.displayName).tag(cat)
-                    }
-                }
-                .pickerStyle(MenuPickerStyle())
-                .font(.system(size: 12))
+                Text("Assign a category in Settings → Projects")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
                 Button("Create & Assign") {
-                    guard !newProjectName.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-                    onSelect(newProjectName.trimmingCharacters(in: .whitespaces), selectedCategory)
+                    let name = newProjectName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    onSelect(name)
                 }
                 .buttonStyle(BorderedProminentButtonStyle())
                 .controlSize(.small)
@@ -751,93 +699,425 @@ private struct ProjectPickerPopover: View {
     }
 }
 
-// MARK: - Project Manager Section
+// MARK: - Projects Section (URL category overrides + user categories + project→category assignments)
 
-private struct ProjectManagerSection: View {
+private struct ProjectsSection: View {
     @ObservedObject private var store = LocalStore.shared
-    @State private var editingProject: String? = nil
-    @State private var editText: String = ""
-    @State private var confirmingDelete: String? = nil
+    @State private var newCategoryName = ""
+    @State private var newCategoryStatus = TaskStatus.onTask
+    @State private var editingCategory: ProjectCategory? = nil
+    @State private var editCategoryName = ""
+    @State private var editCategoryStatus = TaskStatus.onTask
+    @State private var confirmingDeleteCategory: UUID? = nil
+
+    private func statusColor(_ s: TaskStatus) -> Color {
+        switch s { case .onTask: return .green; case .drift: return .yellow; case .goofingOff: return .red }
+    }
 
     var body: some View {
-        if store.allProjectNames.isEmpty {
-            Text("No projects yet — they're created automatically as you work.")
-                .font(.system(size: 11))
-                .foregroundColor(.secondary)
-        } else {
-            VStack(spacing: 2) {
-                ForEach(store.allProjectNames, id: \.self) { project in
-                    projectRow(project)
+        VStack(alignment: .leading, spacing: 20) {
+            activityTypesSection
+            Divider()
+            categoriesSection
+            if !store.allProjectNames.isEmpty {
+                Divider()
+                assignmentsSection
+            }
+        }
+    }
+
+    // MARK: Activity Types (auto-generated URLCategory overrides)
+
+    private var activityTypesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader("Activity Types", detail: "Override the default status for auto-detected categories.")
+
+            VStack(spacing: 3) {
+                ForEach(URLCategory.allCases.filter { $0 != .unknown }, id: \.self) { urlCat in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(statusColor(store.effectiveStatus(for: urlCat)))
+                            .frame(width: 8, height: 8)
+                        Text(urlCat.displayName)
+                            .font(.system(size: 12)).lineLimit(1)
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { store.effectiveStatus(for: urlCat) },
+                            set: { store.setURLCategoryOverride(urlCat, status: $0) }
+                        )) {
+                            ForEach(TaskStatus.allCases, id: \.self) { s in
+                                Text(s.displayName).tag(s)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 110)
+                    }
+                    .padding(.vertical, 1)
                 }
             }
         }
     }
 
     @ViewBuilder
-    private func projectRow(_ project: String) -> some View {
-        HStack(spacing: 6) {
-            if editingProject == project {
-                TextField("Project name", text: $editText)
+    private func sectionHeader(_ title: String, detail: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium)).foregroundColor(.secondary)
+                .textCase(.uppercase).tracking(0.4)
+            if let detail = detail {
+                Text(detail).font(.system(size: 10)).foregroundColor(.secondary.opacity(0.8))
+            }
+        }
+    }
+
+    // MARK: User Categories
+
+    private var categoriesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader("Custom Categories", detail: "Group projects into named categories with a status.")
+
+            if store.projectCategories.isEmpty {
+                Text("No categories yet. Add one below.")
+                    .font(.system(size: 11)).foregroundColor(.secondary)
+            } else {
+                VStack(spacing: 3) {
+                    ForEach(store.projectCategories) { cat in
+                        if editingCategory?.id == cat.id {
+                            // Inline edit row
+                            HStack(spacing: 6) {
+                                Circle().fill(statusColor(editCategoryStatus)).frame(width: 8, height: 8)
+                                TextField("Category name", text: $editCategoryName)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .font(.system(size: 12))
+                                Picker("", selection: $editCategoryStatus) {
+                                    ForEach(TaskStatus.allCases, id: \.self) { s in
+                                        Text(s.displayName).tag(s)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(width: 100)
+                                Button("Save") {
+                                    let name = editCategoryName.trimmingCharacters(in: .whitespaces)
+                                    guard !name.isEmpty else { return }
+                                    var updated = cat
+                                    updated.name   = name
+                                    updated.status = editCategoryStatus
+                                    store.save(projectCategory: updated)
+                                    editingCategory = nil
+                                }
+                                .buttonStyle(BorderedProminentButtonStyle()).controlSize(.mini)
+                                .disabled(editCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+                                Button("Cancel") { editingCategory = nil }
+                                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+                            }
+                            .padding(.vertical, 2)
+                        } else {
+                            HStack(spacing: 6) {
+                                Circle().fill(statusColor(cat.status)).frame(width: 8, height: 8)
+                                Text(cat.name).font(.system(size: 12)).lineLimit(1)
+                                Text(cat.status.displayName)
+                                    .font(.system(size: 10)).foregroundColor(.secondary)
+                                Spacer()
+                                Button(action: {
+                                    editCategoryName   = cat.name
+                                    editCategoryStatus = cat.status
+                                    editingCategory    = cat
+                                }) {
+                                    Image(systemName: "pencil").font(.system(size: 11))
+                                }
+                                .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
+                                if confirmingDeleteCategory == cat.id {
+                                    Button("Delete?") {
+                                        store.deleteProjectCategory(id: cat.id)
+                                        confirmingDeleteCategory = nil
+                                    }
+                                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini).foregroundColor(.red)
+                                    Button("No") { confirmingDeleteCategory = nil }
+                                        .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+                                } else {
+                                    Button(action: { confirmingDeleteCategory = cat.id }) {
+                                        Image(systemName: "trash").font(.system(size: 11))
+                                    }
+                                    .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+
+            // Add new category
+            HStack(spacing: 6) {
+                Circle().fill(statusColor(newCategoryStatus)).frame(width: 8, height: 8)
+                TextField("New category…", text: $newCategoryName)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .font(.system(size: 12))
-                    .onSubmit { commitRename(project) }
-                Button("Save") { commitRename(project) }
-                    .buttonStyle(BorderedProminentButtonStyle())
-                    .controlSize(.mini)
-                    .disabled(editText.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Cancel") { editingProject = nil }
-                    .buttonStyle(BorderedButtonStyle())
-                    .controlSize(.mini)
-            } else {
-                Text(project)
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                Spacer()
-                // Rename
-                Button(action: { startEditing(project) }) {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 11))
+                Picker("", selection: $newCategoryStatus) {
+                    ForEach(TaskStatus.allCases, id: \.self) { s in
+                        Text(s.displayName).tag(s)
+                    }
                 }
-                .buttonStyle(PlainButtonStyle())
-                .foregroundColor(.secondary)
-                .help("Rename project")
-                // Delete
-                if confirmingDelete == project {
-                    Button("Delete?") {
-                        store.deleteProject(project)
-                        confirmingDelete = nil
+                .labelsHidden()
+                .frame(width: 100)
+                Button("Add") {
+                    let name = newCategoryName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    store.save(projectCategory: ProjectCategory(name: name, status: newCategoryStatus))
+                    newCategoryName = ""
+                    newCategoryStatus = .onTask
+                }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+                .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    // MARK: Project → Category Assignments
+
+    private var assignmentsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader("Project → Category", detail: "Applies to all projects — auto-detected and manual.")
+
+            VStack(spacing: 3) {
+                ForEach(store.allProjectNames, id: \.self) { project in
+                    HStack(spacing: 6) {
+                        Text(project)
+                            .font(.system(size: 12)).lineLimit(1)
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { store.projectAssignments[project] ?? "" },
+                            set: { store.assignCategory(toProject: project, categoryName: $0.isEmpty ? nil : $0) }
+                        )) {
+                            Text("(none)").tag("")
+                            if !store.projectCategories.isEmpty {
+                                Divider()
+                                ForEach(store.projectCategories, id: \.name) { cat in
+                                    Label {
+                                        Text(cat.name)
+                                    } icon: {
+                                        Image(systemName: "circle.fill")
+                                            .foregroundColor(statusColor(cat.status))
+                                            .font(.system(size: 8))
+                                    }
+                                    .tag(cat.name)
+                                }
+                            }
+                            Divider()
+                            ForEach(URLCategory.allCases.filter { $0 != .unknown }, id: \.self) { urlCat in
+                                Label {
+                                    Text(urlCat.displayName)
+                                } icon: {
+                                    Image(systemName: "circle.fill")
+                                        .foregroundColor(statusColor(store.effectiveStatus(for: urlCat)))
+                                        .font(.system(size: 8))
+                                }
+                                .tag(urlCat.rawValue)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 130)
                     }
-                    .buttonStyle(BorderedButtonStyle())
-                    .controlSize(.mini)
-                    .foregroundColor(.red)
-                    Button("No") { confirmingDelete = nil }
-                        .buttonStyle(BorderedButtonStyle())
-                        .controlSize(.mini)
-                } else {
-                    Button(action: { confirmingDelete = project }) {
-                        Image(systemName: "trash")
-                            .font(.system(size: 11))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .foregroundColor(.secondary)
-                    .help("Delete project")
+                    .padding(.vertical, 1)
                 }
             }
         }
-        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - Infographic Card View
+
+struct InfographicCardView: View {
+    let spec: InfographicSpec?
+    let appState: AppState
+
+    var body: some View {
+        if let spec = spec {
+            cardWithLink(spec)
+        } else {
+            // Shown only during the brief moment before configure() fires (app cold start)
+            Text("Steady")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.secondary)
+        }
     }
 
-    private func startEditing(_ project: String) {
-        confirmingDelete = nil
-        editText = project
-        editingProject = project
+    @ViewBuilder
+    private func cardWithLink(_ spec: InfographicSpec) -> some View {
+        if let urlString = spec.linkURL, let url = URL(string: urlString) {
+            renderedCard(spec)
+                .underline(false)
+                .overlay(alignment: .bottomLeading) {
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 7))
+                        .foregroundColor(.secondary.opacity(0.5))
+                        .offset(y: 2)
+                }
+                .onTapGesture { NSWorkspace.shared.open(url) }
+                .onHover { hovering in
+                    if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+        } else {
+            renderedCard(spec)
+        }
     }
 
-    private func commitRename(_ oldName: String) {
-        let trimmed = editText.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        store.renameProject(from: oldName, to: trimmed)
-        editingProject = nil
+    // MARK: Card dispatch
+
+    @ViewBuilder
+    private func renderedCard(_ spec: InfographicSpec) -> some View {
+        switch spec.cardType {
+        case .stat:       statCard(spec)
+        case .multiStat:  multiStatCard(spec)
+        case .barSplit:   barSplitCard(spec)
+        case .dotRow:     dotRowCard(spec)
+        case .labelValue: labelValueCard(spec)
+        }
+    }
+
+    // MARK: stat
+
+    private func statCard(_ spec: InfographicSpec) -> some View {
+        let accentColor = color(for: spec.accent)
+        return VStack(alignment: .leading, spacing: 1) {
+            if let label = spec.label {
+                Text(label)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.5)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(spec.value ?? "—")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundColor(accentColor ?? .primary)
+                    .lineLimit(1)
+                if let subtitle = spec.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    // MARK: multiStat
+
+    private func multiStatCard(_ spec: InfographicSpec) -> some View {
+        let items = Array((spec.items ?? []).prefix(3))
+        return HStack(alignment: .center, spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(item.value)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .lineLimit(1)
+                    Text(item.label)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                if idx < items.count - 1 {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.25))
+                        .frame(width: 1, height: 24)
+                        .padding(.horizontal, 12)
+                }
+            }
+        }
+    }
+
+    // MARK: barSplit
+
+    private func barSplitCard(_ spec: InfographicSpec) -> some View {
+        let segments = spec.segments ?? []
+        return VStack(alignment: .leading, spacing: 4) {
+            if let title = spec.barTitle {
+                Text(title)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(color(for: seg.color) ?? .gray)
+                            .frame(width: max(4, geo.size.width * CGFloat(seg.ratio) - 2))
+                    }
+                }
+            }
+            .frame(height: 8)
+            // Legend
+            HStack(spacing: 10) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                    HStack(spacing: 3) {
+                        Circle()
+                            .fill(color(for: seg.color) ?? .gray)
+                            .frame(width: 5, height: 5)
+                        Text(seg.label)
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: dotRow
+
+    private func dotRowCard(_ spec: InfographicSpec) -> some View {
+        let dots = spec.dots ?? []
+        return VStack(alignment: .leading, spacing: 4) {
+            if let title = spec.dotTitle {
+                Text(title)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+                    .tracking(0.4)
+            }
+            HStack(spacing: 4) {
+                ForEach(Array(dots.prefix(12).enumerated()), id: \.offset) { _, dot in
+                    Circle()
+                        .fill(color(for: dot) ?? .gray)
+                        .frame(width: 8, height: 8)
+                }
+            }
+        }
+    }
+
+    // MARK: labelValue
+
+    private func labelValueCard(_ spec: InfographicSpec) -> some View {
+        let rows = spec.rows ?? []
+        return VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(rows.prefix(2).enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 6) {
+                    Text(row.label)
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                    Text(row.value)
+                        .font(.system(size: 10, weight: .semibold))
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+
+    // MARK: Helper
+
+    private func color(for name: String?) -> Color? {
+        switch name {
+        case "green":  return .green
+        case "yellow": return .yellow
+        case "red":    return .red
+        case "orange": return .orange   // legacy LLM responses
+        case "blue":   return .blue
+        case "gray":   return .gray
+        default:       return nil
+        }
     }
 }
 
@@ -845,7 +1125,48 @@ private struct ProjectManagerSection: View {
 
 struct InlineSettingsView: View {
     @Binding var isPresented: Bool
+    @State private var selectedTab: SettingsTab = .general
 
+    enum SettingsTab { case general, projects }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Tab bar
+            HStack(spacing: 0) {
+                tabButton("General",  tab: .general,  icon: "key")
+                tabButton("Projects", tab: .projects, icon: "folder")
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+
+            Divider()
+
+            switch selectedTab {
+            case .general:  GeneralSettingsTab()
+            case .projects: ProjectsSettingsTab()
+            }
+        }
+    }
+
+    private func tabButton(_ label: String, tab: SettingsTab, icon: String) -> some View {
+        Button(action: { selectedTab = tab }) {
+            HStack(spacing: 4) {
+                Image(systemName: icon).font(.system(size: 11))
+                Text(label).font(.system(size: 12, weight: selectedTab == tab ? .semibold : .regular))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 5)
+            .background(selectedTab == tab ? Color.accentColor.opacity(0.12) : Color.clear)
+            .cornerRadius(6)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .foregroundColor(selectedTab == tab ? .accentColor : .secondary)
+    }
+}
+
+// MARK: - General Settings Tab
+
+private struct GeneralSettingsTab: View {
     @State private var apiKey: String = ""
     @State private var apiKeySaved = false
 
@@ -854,6 +1175,7 @@ struct InlineSettingsView: View {
     @AppStorage("llm.conversationModel") private var conversationModel = ""
     @AppStorage("obsidian.vaultPath") private var vaultPath = ""
     @AppStorage("obsidian.enabled") private var obsidianEnabled = false
+    @AppStorage("content.feedURL") private var contentFeedURL = "https://bookmarkgarden.vercel.app/?item=tweet-2036000729173987338"
 
     enum TestState { case idle, testing, success(String), failure(String) }
     @State private var testState: TestState = .idle
@@ -877,7 +1199,6 @@ struct InlineSettingsView: View {
                                 }
                             }
                             .disabled(apiKey.isEmpty || conversationModel.isEmpty || { if case .testing = testState { return true }; return false }())
-
                             switch testState {
                             case .success(let msg):
                                 Label(msg, systemImage: "checkmark.circle.fill").font(.caption).foregroundColor(.green)
@@ -913,10 +1234,6 @@ struct InlineSettingsView: View {
                     }
                 }
 
-                settingsSection("Projects") {
-                    ProjectManagerSection()
-                }
-
                 settingsSection("Obsidian") {
                     VStack(alignment: .leading, spacing: 8) {
                         Toggle("Sync sessions to vault", isOn: $obsidianEnabled).font(.system(size: 13))
@@ -927,6 +1244,15 @@ struct InlineSettingsView: View {
                                 Button("Browse…") { browseForVault() }
                             }
                         }
+                    }
+                }
+
+                settingsSection("Content Feed") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("https://…", text: $contentFeedURL)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Text("Shown in the header when there's no activity yet. Point it at any page — its title becomes a clickable link.")
+                            .font(.caption).foregroundColor(.secondary)
                     }
                 }
 
@@ -941,8 +1267,7 @@ struct InlineSettingsView: View {
     @ViewBuilder
     private func settingsSection<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
+            Text(title).font(.system(size: 11, weight: .medium)).foregroundColor(.secondary)
                 .textCase(.uppercase).tracking(0.5)
             content()
         }
@@ -1001,5 +1326,18 @@ struct InlineSettingsView: View {
         panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
         panel.prompt = "Select Vault"
         if panel.runModal() == .OK, let url = panel.url { vaultPath = url.path }
+    }
+}
+
+// MARK: - Projects Settings Tab
+
+private struct ProjectsSettingsTab: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ProjectsSection()
+            }
+            .padding(16)
+        }
     }
 }

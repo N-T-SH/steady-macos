@@ -18,6 +18,10 @@ actor URLTracker {
     private var currentIntention: Intention?
     private var knownRules: [URLRule] = []
     private var knownProjects: [String] = []
+    /// Maps project name → TaskStatus derived from user-assigned project categories.
+    private var projectStatusMap: [String: TaskStatus] = [:]
+    /// Maps URLCategory rawValue → user-overridden TaskStatus.
+    private var urlCategoryOverrideMap: [String: TaskStatus] = [:]
 
     // ActivityWatch bucket cache
     private var awWebBuckets: [String] = []
@@ -46,6 +50,22 @@ actor URLTracker {
 
     func updateKnownProjects(_ projects: [String]) {
         self.knownProjects = projects
+    }
+
+    func updateProjectCategories(_ categories: [ProjectCategory], assignments: [String: String],
+                                  urlCategoryOverrides: [String: TaskStatus] = [:]) {
+        var map: [String: TaskStatus] = [:]
+        for (project, catName) in assignments {
+            if let cat = categories.first(where: { $0.name == catName }) {
+                // Custom category
+                map[project] = cat.status
+            } else if let urlCat = URLCategory(rawValue: catName) {
+                // URLCategory rawValue — respect any user override for that category
+                map[project] = urlCategoryOverrides[catName] ?? urlCat.defaultTaskStatus
+            }
+        }
+        self.projectStatusMap        = map
+        self.urlCategoryOverrideMap  = urlCategoryOverrides
     }
 
     func updateIntention(_ intention: Intention?) {
@@ -108,12 +128,22 @@ actor URLTracker {
 
     // MARK: - ActivityWatch
 
+    private var awLastFailedAt: Date? = nil
+    private let awFailureBackoff: TimeInterval = 60.0  // poll every 60s when AW is down
+
     private func pollViaActivityWatch() async -> (url: String, title: String)? {
+        // When AW is known unavailable, back off to reduce connection-refused noise
+        if awAvailable == false, let lastFail = awLastFailedAt,
+           Date().timeIntervalSince(lastFail) < awFailureBackoff {
+            return nil
+        }
+
         // Refresh bucket list every 5 minutes
         let needsRefresh = (awWebBuckets.isEmpty && awWindowBucket == nil)
             || Date().timeIntervalSince(awBucketsLoadedAt) > 300
         if needsRefresh {
             guard let buckets = await fetchAWBuckets() else {
+                awLastFailedAt = Date()
                 if awAvailable != false {
                     awAvailable = false
                     delegate?.urlTracker(self, didUpdateActivityWatchStatus: false)
@@ -126,6 +156,7 @@ actor URLTracker {
             awBucketsLoadedAt = Date()
             if awAvailable != true {
                 awAvailable = true
+                awLastFailedAt = nil
                 delegate?.urlTracker(self, didUpdateActivityWatchStatus: true)
                 print("[URLTracker] ActivityWatch connected — \(buckets.web.count) web bucket(s), window: \(buckets.window ?? "none")")
             }
@@ -231,9 +262,13 @@ actor URLTracker {
             : (URL(string: url)?.host ?? url)
 
         if let rule = knownRules.first(where: { $0.domain == ruleKey }) {
+            // Priority: project assignment → URL category override → hardcoded default
+            let taskStatus = projectStatusMap[rule.projectName]
+                ?? urlCategoryOverrideMap[rule.category.rawValue]
+                ?? rule.category.defaultTaskStatus
             let classification = URLClassification(
                 url: url, pageTitle: title,
-                onTask: rule.category.isProductive,
+                taskStatus: taskStatus,
                 project: rule.projectName,
                 category: rule.category,
                 confidence: 1.0,
@@ -241,7 +276,7 @@ actor URLTracker {
                 timestamp: Date()
             )
             delegate?.urlTracker(self, didClassifyURL: classification)
-            if rule.category.isProductive { driftStartTime = nil }
+            if taskStatus == .onTask { driftStartTime = nil }
             return
         }
 
@@ -254,16 +289,33 @@ actor URLTracker {
                 knownRules: knownRules,
                 knownProjects: knownProjects
             )
-            delegate?.urlTracker(self, didClassifyURL: classification)
-
-            if let project = classification.project, !project.isEmpty {
-                delegate?.urlTracker(self, didDiscoverNewRule: ruleKey, projectName: project, category: classification.category)
+            // Apply 3-level priority: project assignment → URL category override → LLM result
+            let effectiveStatus = classification.project.flatMap { projectStatusMap[$0] }
+                ?? urlCategoryOverrideMap[classification.category.rawValue]
+                ?? classification.taskStatus
+            let finalClassification: URLClassification
+            if effectiveStatus != classification.taskStatus {
+                finalClassification = URLClassification(
+                    url: classification.url, pageTitle: classification.pageTitle,
+                    taskStatus: effectiveStatus,
+                    project: classification.project, category: classification.category,
+                    confidence: classification.confidence, reasoning: classification.reasoning,
+                    timestamp: classification.timestamp
+                )
+            } else {
+                finalClassification = classification
             }
 
-            if currentIntention != nil && !classification.onTask {
+            delegate?.urlTracker(self, didClassifyURL: finalClassification)
+
+            if let project = finalClassification.project, !project.isEmpty {
+                delegate?.urlTracker(self, didDiscoverNewRule: ruleKey, projectName: project, category: finalClassification.category)
+            }
+
+            if currentIntention != nil && !finalClassification.onTask {
                 if driftStartTime == nil { driftStartTime = Date() }
                 if Date().timeIntervalSince(driftStartTime!) > gracePeriod {
-                    delegate?.urlTracker(self, didDetectOffTask: classification)
+                    delegate?.urlTracker(self, didDetectOffTask: finalClassification)
                 }
             } else {
                 driftStartTime = nil
