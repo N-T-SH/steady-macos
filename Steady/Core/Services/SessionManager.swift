@@ -49,6 +49,10 @@ class SessionManager: ObservableObject {
         let rules = LocalStore.shared.urlRules
         let projects = LocalStore.shared.intentions.map { $0.task }
         await tracker.startTracking(llmProvider: llmProvider, knownRules: rules, knownProjects: projects)
+        // Populate the active-project set immediately so deleted projects are filtered from day one.
+        let activities = LocalStore.shared.activities
+        let userProjects = LocalStore.shared.projects
+        await tracker.updateProjectConfig(activities: activities, projects: userProjects)
     }
 
     /// Reassign a captured activity to a different project/category.
