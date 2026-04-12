@@ -10,6 +10,9 @@ struct ConversationPanel: View {
     @State private var showDone = false
     @State private var showStashed = false
     @State private var todoProjectSuggestions: [String] = []
+    @State private var selectedProjectFilter: String? = nil
+    @State private var chatSuggestions: [String] = []
+    @State private var chatSuggestionIndex = -1
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,6 +82,10 @@ struct ConversationPanel: View {
                 timerBar
                 Divider()
             }
+            if !chatSuggestions.isEmpty {
+                chatSuggestionsView
+                Divider()
+            }
             inputArea
         }
     }
@@ -89,11 +96,46 @@ struct ConversationPanel: View {
         let active = appState.activeTodos
         let done = appState.completedTodos
         let stashed = appState.stashedTodos
+        let activeProjects: [String] = {
+            var seen = Set<String>()
+            return active.compactMap { $0.projectName }.filter { seen.insert($0).inserted }
+        }()
+        let filtered = selectedProjectFilter.map { proj in active.filter { $0.projectName == proj } } ?? active
 
         return ScrollView {
             VStack(spacing: 0) {
+                // Project filter chips
+                if activeProjects.count > 1 || (activeProjects.count == 1 && selectedProjectFilter != nil) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(activeProjects, id: \.self) { proj in
+                                let isSelected = selectedProjectFilter == proj
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.15)) {
+                                        selectedProjectFilter = isSelected ? nil : proj
+                                    }
+                                }) {
+                                    Text("#\(proj)")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundColor(isSelected ? .white : .accentColor)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 3)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(isSelected ? Color.accentColor : Color.accentColor.opacity(0.12))
+                                        )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 5)
+                    }
+                    Divider().padding(.horizontal, 14)
+                }
+
                 // Active items
-                ForEach(active) { todo in
+                ForEach(filtered) { todo in
                     ActiveTodoRow(
                         todo: todo,
                         onToggle: { appState.toggleTodo(id: todo.id) },
@@ -387,14 +429,21 @@ struct ConversationPanel: View {
             .buttonStyle(PlainButtonStyle())
             .help(appState.showTodoPanel ? "Hide intentions" : "Show intentions")
 
-            TextField("Message Steady…", text: $inputText)
-                .textFieldStyle(PlainTextFieldStyle())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(RoundedRectangle(cornerRadius: 18).fill(Color(NSColor.controlBackgroundColor)))
-                .onSubmit { sendMessage() }
+            TaggableTextField(
+                placeholder: "Message Steady…",
+                text: $inputText,
+                onSubmit: sendMessageOrConfirmSuggestion,
+                onArrowUp: chatArrowUp,
+                onArrowDown: chatArrowDown
+            )
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 18).fill(Color(NSColor.controlBackgroundColor)))
+            .onChange(of: inputText) { text in
+                updateChatProjectSuggestions(for: text)
+            }
 
-            Button(action: sendMessage) {
+            Button(action: sendMessageOrConfirmSuggestion) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
                     .foregroundColor(inputText.isEmpty ? .gray : .accentColor)
@@ -410,28 +459,82 @@ struct ConversationPanel: View {
         guard !inputText.isEmpty else { return }
         appState.sendUserMessage(inputText)
         inputText = ""
+        chatSuggestions = []
+        chatSuggestionIndex = -1
+    }
+
+    private func sendMessageOrConfirmSuggestion() {
+        if chatSuggestionIndex >= 0, chatSuggestionIndex < chatSuggestions.count {
+            insertChatProjectTag(chatSuggestions[chatSuggestionIndex])
+        } else {
+            sendMessage()
+        }
+    }
+
+    private func updateChatProjectSuggestions(for text: String) {
+        guard let query = currentHashtagQuery(for: text) else {
+            chatSuggestions = []
+            chatSuggestionIndex = -1
+            return
+        }
+        let all = store.allProjectNames
+        chatSuggestions = query.isEmpty
+            ? Array(all.prefix(6))
+            : all.filter { $0.lowercased().hasPrefix(query.lowercased()) }
+        chatSuggestionIndex = -1
+    }
+
+    private func insertChatProjectTag(_ project: String) {
+        if let lastHash = inputText.lastIndex(of: "#") {
+            inputText = String(inputText[...lastHash]) + project
+        } else {
+            inputText += "#\(project)"
+        }
+        chatSuggestions = []
+        chatSuggestionIndex = -1
+    }
+
+    private func chatArrowUp() {
+        guard !chatSuggestions.isEmpty else { return }
+        chatSuggestionIndex = chatSuggestionIndex <= 0 ? chatSuggestions.count - 1 : chatSuggestionIndex - 1
+    }
+
+    private func chatArrowDown() {
+        guard !chatSuggestions.isEmpty else { return }
+        chatSuggestionIndex = (chatSuggestionIndex + 1) % chatSuggestions.count
+    }
+
+    private var chatSuggestionsView: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(chatSuggestions.enumerated()), id: \.element) { idx, project in
+                Button(action: { insertChatProjectTag(project) }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "number")
+                            .font(.system(size: 10))
+                            .foregroundColor(chatSuggestionIndex == idx ? .white : .accentColor)
+                        Text(project)
+                            .font(.system(size: 11))
+                            .foregroundColor(chatSuggestionIndex == idx ? .white : .primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                .background(chatSuggestionIndex == idx ? Color.accentColor : Color.accentColor.opacity(0.06))
+            }
+        }
     }
 }
 
 // MARK: - Todo Rows
 
 private struct ActiveTodoRow: View {
-    @ObservedObject private var store = LocalStore.shared
     let todo: TodoItem
     let onToggle: () -> Void
     let onStash: () -> Void
     let onDelete: () -> Void
-
-    /// Colour for the project badge, derived from the project's activity.
-    private var projectBadgeColor: Color {
-        guard let name = todo.projectName,
-              let activity = store.activity(forProject: name) else { return .accentColor }
-        switch activity.status {
-        case .onTask:     return .green
-        case .drift:      return .yellow
-        case .goofingOff: return .red
-        }
-    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -444,20 +547,11 @@ private struct ActiveTodoRow: View {
             }
             .buttonStyle(PlainButtonStyle())
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(formattedText(todo.text))
-                    .font(.system(size: 12))
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                if let projectName = todo.projectName {
-                    Text("#\(projectName)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(projectBadgeColor)
-                        .lineLimit(1)
-                }
-            }
+            Text(formattedText(todo.text))
+                .font(.system(size: 12))
+                .foregroundColor(.primary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             // Stash
             Button(action: onStash) {
@@ -574,6 +668,64 @@ private struct StashedTodoRow: View {
         .padding(.trailing, 4)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Taggable Text Field
+
+/// NSTextField wrapper that intercepts up/down arrow keys for suggestion navigation.
+private struct TaggableTextField: NSViewRepresentable {
+    var placeholder: String
+    @Binding var text: String
+    var onSubmit: () -> Void
+    var onArrowUp: () -> Void
+    var onArrowDown: () -> Void
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.placeholderString = placeholder
+        field.isBordered = false
+        field.backgroundColor = .clear
+        field.focusRingType = .none
+        field.font = NSFont.systemFont(ofSize: 13)
+        field.delegate = context.coordinator
+        return field
+    }
+
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: TaggableTextField
+
+        init(_ parent: TaggableTextField) { self.parent = parent }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
+
+        func control(_ control: NSControl, textView: NSTextView,
+                     doCommandBy commandSelector: Selector) -> Bool {
+            switch commandSelector {
+            case #selector(NSResponder.moveUp(_:)):
+                parent.onArrowUp()
+                return true
+            case #selector(NSResponder.moveDown(_:)):
+                parent.onArrowDown()
+                return true
+            case #selector(NSResponder.insertNewline(_:)):
+                parent.onSubmit()
+                return true
+            default:
+                return false
+            }
+        }
     }
 }
 
