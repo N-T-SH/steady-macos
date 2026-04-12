@@ -19,12 +19,11 @@ Most focus tools rely on restriction. Steady takes the opposite approach: it hel
 
 - **Menu bar presence** — lives quietly in the background, accessible via `Cmd+Shift+Space`
 - **Intention setting** — define what you're doing and why it matters before each session
-- **AI-powered activity classification** — LLM reads your active window/URL locally and detects off-task drift
+- **AI-powered activity classification** — LLM reads your active window/URL and detects off-task drift
 - **Gentle check-ins** — a brief, non-blocking prompt when drift is detected
 - **Focus timers & nudges** — set a countdown or ask the AI to check in at a specific time
 - **Obsidian sync** — session summaries written as Markdown files into your vault
 - **Todos** — lightweight task list integrated into the panel
-- **Privacy-first** — all data stored locally; API key in macOS Keychain
 
 ## Installation
 
@@ -44,12 +43,8 @@ Open the inline settings panel (gear icon) to configure:
 
 - **LLM Provider** — OpenRouter (default), OpenAI, Anthropic, or any OpenAI-compatible endpoint
 - **Models** — separate models for classification and conversation
-- **API Key** — stored securely in macOS Keychain, never in files
+- **API Key** — stored securely in macOS Keychain
 - **Obsidian Vault** — optional path for session sync
-
-Recommended defaults:
-- Classification: `google/gemini-flash-2.0` via OpenRouter (fast, cheap)
-- Conversation: `anthropic/claude-haiku-4-5` via OpenRouter
 
 ## Project Structure
 
