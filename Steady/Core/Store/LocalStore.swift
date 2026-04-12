@@ -102,8 +102,6 @@ class LocalStore: ObservableObject {
             urlRules.append(URLRule(domain: domain, projectName: projectName, category: category))
         }
         persist(urlRules, to: urlRulesURL)
-        // Auto-register the project
-        addProjectIfNeeded(projectName)
     }
 
     func deleteURLRule(_ id: UUID) {

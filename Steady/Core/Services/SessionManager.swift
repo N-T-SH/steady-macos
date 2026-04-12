@@ -70,6 +70,7 @@ class SessionManager: ObservableObject {
         allActivityToday[idx] = updated
 
         let ruleKey = old.url.hasPrefix("app://") ? old.url : (URL(string: old.url)?.host ?? old.url)
+        LocalStore.shared.addProjectIfNeeded(project)
         LocalStore.shared.saveURLRule(domain: ruleKey, projectName: project, category: old.category)
 
         if let tracker = urlTracker {
