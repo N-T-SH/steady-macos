@@ -22,6 +22,8 @@ actor URLTracker {
     private var projectStatusMap: [String: TaskStatus] = [:]
     /// Maps URLCategory rawValue → user-overridden TaskStatus.
     private var urlCategoryOverrideMap: [String: TaskStatus] = [:]
+    /// Names of projects currently defined by the user (deleted projects are absent).
+    private var activeProjectNames: Set<String> = []
 
     // ActivityWatch bucket cache
     private var awWebBuckets: [String] = []
@@ -56,13 +58,16 @@ actor URLTracker {
     func updateProjectConfig(activities: [Activity], projects: [Project]) {
         // Build project → status map from explicit project/activity associations
         var statusMap: [String: TaskStatus] = [:]
+        var projectNames: Set<String> = []
         for project in projects {
+            projectNames.insert(project.name)
             if let actName = project.activityName,
                let activity = activities.first(where: { $0.name == actName }) {
                 statusMap[project.name] = activity.status
             }
         }
         self.projectStatusMap = statusMap
+        self.activeProjectNames = projectNames
 
         // Build URLCategory override map from activities that map to URLCategory rawValues
         var overrideMap: [String: TaskStatus] = [:]
@@ -268,14 +273,17 @@ actor URLTracker {
             : (URL(string: url)?.host ?? url)
 
         if let rule = knownRules.first(where: { $0.domain == ruleKey }) {
+            // Only honour the saved rule's project if the project still exists.
+            // A deleted project must not bleed into new classifications.
+            let project: String? = activeProjectNames.contains(rule.projectName) ? rule.projectName : nil
             // Priority: project assignment → URL category override → hardcoded default
-            let taskStatus = projectStatusMap[rule.projectName]
+            let taskStatus = project.flatMap { projectStatusMap[$0] }
                 ?? urlCategoryOverrideMap[rule.category.rawValue]
                 ?? rule.category.defaultTaskStatus
             let classification = URLClassification(
                 url: url, pageTitle: title,
                 taskStatus: taskStatus,
-                project: rule.projectName,
+                project: project,
                 category: rule.category,
                 confidence: 1.0,
                 reasoning: "Matched saved rule",
@@ -289,22 +297,28 @@ actor URLTracker {
         guard let llmProvider = llmProvider else { return }
 
         do {
+            // Only pass rules whose projects still exist so the LLM doesn't see deleted project names.
+            let activeRules = knownRules.filter { activeProjectNames.contains($0.projectName) }
             let classification = try await llmProvider.classifyActivity(
                 url: url, title: title,
                 intention: currentIntention,
-                knownRules: knownRules,
+                knownRules: activeRules,
                 knownProjects: knownProjects
             )
+            // Discard any project the LLM invented that isn't a user-defined project.
+            let resolvedProject = classification.project.flatMap {
+                activeProjectNames.contains($0) ? $0 : nil
+            }
             // Apply 3-level priority: project assignment → URL category override → LLM result
-            let effectiveStatus = classification.project.flatMap { projectStatusMap[$0] }
+            let effectiveStatus = resolvedProject.flatMap { projectStatusMap[$0] }
                 ?? urlCategoryOverrideMap[classification.category.rawValue]
                 ?? classification.taskStatus
             let finalClassification: URLClassification
-            if effectiveStatus != classification.taskStatus {
+            if effectiveStatus != classification.taskStatus || resolvedProject != classification.project {
                 finalClassification = URLClassification(
                     url: classification.url, pageTitle: classification.pageTitle,
                     taskStatus: effectiveStatus,
-                    project: classification.project, category: classification.category,
+                    project: resolvedProject, category: classification.category,
                     confidence: classification.confidence, reasoning: classification.reasoning,
                     timestamp: classification.timestamp
                 )
@@ -314,7 +328,9 @@ actor URLTracker {
 
             delegate?.urlTracker(self, didClassifyURL: finalClassification)
 
-            if let project = finalClassification.project, !project.isEmpty {
+            // Only persist a URL rule for active user-defined projects.
+            if let project = finalClassification.project, !project.isEmpty,
+               activeProjectNames.contains(project) {
                 delegate?.urlTracker(self, didDiscoverNewRule: ruleKey, projectName: project, category: finalClassification.category)
             }
 
