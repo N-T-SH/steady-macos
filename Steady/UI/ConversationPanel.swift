@@ -849,7 +849,7 @@ struct ActivityLogView: View {
                     ForEach(Array(filteredActivity.reversed().enumerated()), id: \.offset) { _, c in
                         ActivityLogRow(
                             classification: c,
-                            knownProjects: appState.localStore.allProjectNames,
+                            knownProjects: appState.localStore.projects.map { $0.name }.sorted(),
                             onReclassify: { project in
                                 sm?.reclassify(classificationAt: c.timestamp, project: project)
                             }
