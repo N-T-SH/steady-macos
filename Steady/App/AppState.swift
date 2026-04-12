@@ -58,10 +58,9 @@ class AppState: ObservableObject {
             .assign(to: \.activeSession, on: self)
             .store(in: &cancellables)
 
-        // Propagate project category and URL category override changes to URLTracker in real-time
-        localStore.$projectCategories
-            .combineLatest(localStore.$projectAssignments)
-            .combineLatest(localStore.$urlCategoryOverrides)
+        // Propagate activity and project config changes to URLTracker in real-time
+        localStore.$activities
+            .combineLatest(localStore.$projects)
             .dropFirst()
             .sink { [weak self] _ in
                 Task { await self?.sessionManager?.updateProjectConfig() }
@@ -201,8 +200,32 @@ class AppState: ObservableObject {
     var stashedTodos: [TodoItem] { localStore.todos.filter { $0.isStashed && !$0.isCompleted } }
 
     func addTodo(text: String) {
-        let todo = TodoItem(text: text, order: localStore.todos.count)
+        let projectName = extractFirstProjectTag(from: text)
+        if let name = projectName { localStore.addProjectIfNeeded(name) }
+        let todo = TodoItem(text: text, order: localStore.todos.count, projectName: projectName)
         localStore.save(todo: todo)
+    }
+
+    /// Extracts the first #project-name tag from text. Returns the project name (without #).
+    func extractFirstProjectTag(from text: String) -> String? {
+        let pattern = #"#([A-Za-z0-9][A-Za-z0-9\-_]*)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let range = Range(match.range(at: 1), in: text) else { return nil }
+        return String(text[range])
+    }
+
+    /// Scans content for #project-name tags, registers any new projects, and returns found names.
+    func processProjectHashtags(in content: String) -> [String] {
+        let pattern = #"#([A-Za-z0-9][A-Za-z0-9\-_]*)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let matches = regex.matches(in: content, range: NSRange(content.startIndex..., in: content))
+        return matches.compactMap { match in
+            guard let range = Range(match.range(at: 1), in: content) else { return nil }
+            let name = String(content[range])
+            localStore.addProjectIfNeeded(name)
+            return name
+        }
     }
 
     func toggleTodo(id: UUID) {
@@ -281,6 +304,9 @@ class AppState: ObservableObject {
     }
 
     func sendUserMessage(_ content: String) {
+        // Register any #project-name tags mentioned in the message
+        _ = processProjectHashtags(in: content)
+
         var sessionWithLiveData = activeSession
         sessionWithLiveData?.urlClassifications = sessionManager?.urlClassifications ?? []
 
@@ -461,12 +487,17 @@ class AppState: ObservableObject {
 
     /// Effective TaskStatus for a classification (mirrors URLTracker's 3-level priority chain).
     private func effectiveStatus(_ c: URLClassification) -> TaskStatus {
+        // 1. Project → associated activity
         if let project = c.project,
-           let catName = localStore.projectAssignments[project],
-           let cat = localStore.projectCategories.first(where: { $0.name == catName }) {
-            return cat.status
+           let status = localStore.taskStatus(forProject: project) {
+            return status
         }
-        return localStore.urlCategoryOverrides[c.category.rawValue] ?? c.taskStatus
+        // 2. URLCategory → activity override
+        if let activity = localStore.activities.first(where: { $0.urlCategoryRaw == c.category.rawValue }) {
+            return activity.status
+        }
+        // 3. Stored classification status
+        return c.taskStatus
     }
 
     private func buildFocusStats() -> FocusStats {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// JSON-backed persistence for Intention, Session, and URLRule data.
+/// JSON-backed persistence for all Steady app data.
 /// All methods run on the MainActor so callers never need to hop.
 @MainActor
 class LocalStore: ObservableObject {
@@ -10,31 +10,36 @@ class LocalStore: ObservableObject {
     @Published var sessions: [Session] = []
     @Published var urlRules: [URLRule] = []
     @Published var todos: [TodoItem] = []
-    @Published var projectCategories: [ProjectCategory] = []
-    /// Maps project name → category name.
-    @Published var projectAssignments: [String: String] = [:]
-    /// User overrides for auto-generated URLCategory statuses (rawValue → TaskStatus).
-    @Published var urlCategoryOverrides: [String: TaskStatus] = [:]
+    /// Unified activity types (default + custom). Replaces projectCategories + urlCategoryOverrides.
+    @Published var activities: [Activity] = []
+    /// Explicitly managed projects. Auto-populated from LLM detections and #tags.
+    @Published var projects: [Project] = []
 
     private let intentionsURL: URL
     private let sessionsURL: URL
     private let urlRulesURL: URL
     private let todosURL: URL
-    private let projectCategoriesURL: URL
-    private let projectAssignmentsURL: URL
-    private let urlCategoryOverridesURL: URL
+    private let activitiesURL: URL
+    private let projectsURL: URL
+
+    // Legacy URLs — read during migration only, never written
+    private let legacyProjectCategoriesURL: URL
+    private let legacyProjectAssignmentsURL: URL
+    private let legacyURLCategoryOverridesURL: URL
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = appSupport.appendingPathComponent("Steady", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        intentionsURL           = dir.appendingPathComponent("intentions.json")
-        sessionsURL             = dir.appendingPathComponent("sessions.json")
-        urlRulesURL             = dir.appendingPathComponent("url_rules.json")
-        todosURL                = dir.appendingPathComponent("todos.json")
-        projectCategoriesURL    = dir.appendingPathComponent("project_categories.json")
-        projectAssignmentsURL   = dir.appendingPathComponent("project_assignments.json")
-        urlCategoryOverridesURL = dir.appendingPathComponent("url_category_overrides.json")
+        intentionsURL    = dir.appendingPathComponent("intentions.json")
+        sessionsURL      = dir.appendingPathComponent("sessions.json")
+        urlRulesURL      = dir.appendingPathComponent("url_rules.json")
+        todosURL         = dir.appendingPathComponent("todos.json")
+        activitiesURL    = dir.appendingPathComponent("activities.json")
+        projectsURL      = dir.appendingPathComponent("projects.json")
+        legacyProjectCategoriesURL    = dir.appendingPathComponent("project_categories.json")
+        legacyProjectAssignmentsURL   = dir.appendingPathComponent("project_assignments.json")
+        legacyURLCategoryOverridesURL = dir.appendingPathComponent("url_category_overrides.json")
         load()
     }
 
@@ -48,7 +53,7 @@ class LocalStore: ObservableObject {
         urlRules.first { $0.domain == domain }
     }
 
-    // MARK: - Write
+    // MARK: - Intentions
 
     func save(intention: Intention) {
         if let idx = intentions.firstIndex(where: { $0.id == intention.id }) {
@@ -59,6 +64,13 @@ class LocalStore: ObservableObject {
         persist(intentions, to: intentionsURL)
     }
 
+    func deleteIntention(_ id: UUID) {
+        intentions.removeAll { $0.id == id }
+        persist(intentions, to: intentionsURL)
+    }
+
+    // MARK: - Sessions
+
     func save(session: Session) {
         if let idx = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[idx] = session
@@ -67,6 +79,8 @@ class LocalStore: ObservableObject {
         }
         persist(sessions, to: sessionsURL)
     }
+
+    // MARK: - URL Rules
 
     func save(urlRule: URLRule) {
         if let idx = urlRules.firstIndex(where: { $0.id == urlRule.id }) {
@@ -88,11 +102,8 @@ class LocalStore: ObservableObject {
             urlRules.append(URLRule(domain: domain, projectName: projectName, category: category))
         }
         persist(urlRules, to: urlRulesURL)
-    }
-
-    func deleteIntention(_ id: UUID) {
-        intentions.removeAll { $0.id == id }
-        persist(intentions, to: intentionsURL)
+        // Auto-register the project
+        addProjectIfNeeded(projectName)
     }
 
     func deleteURLRule(_ id: UUID) {
@@ -122,78 +133,116 @@ class LocalStore: ObservableObject {
         persist(todos, to: todosURL)
     }
 
-    // MARK: - Project Categories
+    // MARK: - Activities
 
-    func save(projectCategory: ProjectCategory) {
-        if let idx = projectCategories.firstIndex(where: { $0.id == projectCategory.id }) {
-            projectCategories[idx] = projectCategory
+    func save(activity: Activity) {
+        if let idx = activities.firstIndex(where: { $0.id == activity.id }) {
+            activities[idx] = activity
         } else {
-            projectCategories.append(projectCategory)
+            activities.append(activity)
         }
-        persist(projectCategories, to: projectCategoriesURL)
+        persist(activities, to: activitiesURL)
     }
 
-    func deleteProjectCategory(id: UUID) {
-        guard let cat = projectCategories.first(where: { $0.id == id }) else { return }
-        // Clear assignments pointing to this category
-        for (project, catName) in projectAssignments where catName == cat.name {
-            projectAssignments.removeValue(forKey: project)
+    func deleteActivity(id: UUID) {
+        activities.removeAll { $0.id == id }
+        // Orphan any projects that pointed to the deleted activity by name
+        let activityNames = Set(activities.map { $0.name })
+        for i in projects.indices {
+            if let name = projects[i].activityName, !activityNames.contains(name) {
+                projects[i].activityName = nil
+            }
         }
-        projectCategories.removeAll { $0.id == id }
-        persist(projectCategories, to: projectCategoriesURL)
-        persist(projectAssignments, to: projectAssignmentsURL)
+        persist(activities, to: activitiesURL)
+        persist(projects, to: projectsURL)
     }
 
-    func assignCategory(toProject project: String, categoryName: String?) {
-        if let name = categoryName {
-            projectAssignments[project] = name
+    // MARK: - Projects
+
+    func save(project: Project) {
+        if let idx = projects.firstIndex(where: { $0.id == project.id }) {
+            projects[idx] = project
         } else {
-            projectAssignments.removeValue(forKey: project)
+            projects.append(project)
         }
-        persist(projectAssignments, to: projectAssignmentsURL)
+        persist(projects, to: projectsURL)
     }
 
-    /// Effective TaskStatus for a project, falling back to nil when unassigned.
-    /// Resolution order: custom category name → URLCategory rawValue → nil.
-    func taskStatus(forProject project: String) -> TaskStatus? {
-        guard let catName = projectAssignments[project] else { return nil }
-        if let cat = projectCategories.first(where: { $0.name == catName }) {
-            return cat.status
-        }
-        if let urlCat = URLCategory(rawValue: catName) {
-            return effectiveStatus(for: urlCat)
-        }
-        return nil
+    func deleteProject(id: UUID) {
+        guard let project = projects.first(where: { $0.id == id }) else { return }
+        let name = project.name
+        projects.removeAll { $0.id == id }
+        urlRules.removeAll { $0.projectName == name }
+        intentions.removeAll { $0.task == name }
+        persist(projects, to: projectsURL)
+        persist(urlRules, to: urlRulesURL)
+        persist(intentions, to: intentionsURL)
     }
 
-    // MARK: - URL Category Overrides
-
-    /// Override the default TaskStatus for an auto-generated URLCategory.
-    func setURLCategoryOverride(_ category: URLCategory, status: TaskStatus) {
-        urlCategoryOverrides[category.rawValue] = status
-        persist(urlCategoryOverrides, to: urlCategoryOverridesURL)
+    /// Adds a project if no project with that name already exists (case-insensitive).
+    @discardableResult
+    func addProjectIfNeeded(_ name: String) -> Project? {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        if let existing = projects.first(where: { $0.name.lowercased() == trimmed.lowercased() }) {
+            return existing
+        }
+        let project = Project(name: trimmed)
+        projects.append(project)
+        persist(projects, to: projectsURL)
+        return project
     }
 
-    /// Effective TaskStatus for a URLCategory, respecting any user override.
+    // MARK: - Status Resolution
+
+    /// Effective TaskStatus for a URLCategory, applying any activity override.
     func effectiveStatus(for urlCategory: URLCategory) -> TaskStatus {
-        urlCategoryOverrides[urlCategory.rawValue] ?? urlCategory.defaultTaskStatus
+        if let activity = activities.first(where: { $0.urlCategoryRaw == urlCategory.rawValue }) {
+            return activity.status
+        }
+        return urlCategory.defaultTaskStatus
     }
 
-    /// All unique project names across intentions and URL rules.
+    /// Effective TaskStatus for a project via its associated activity. Returns nil when unassigned.
+    func taskStatus(forProject project: String) -> TaskStatus? {
+        guard let p = projects.first(where: { $0.name == project }),
+              let actName = p.activityName,
+              let activity = activities.first(where: { $0.name == actName }) else { return nil }
+        return activity.status
+    }
+
+    /// Activity associated with a project, if any.
+    func activity(forProject project: String) -> Activity? {
+        guard let p = projects.first(where: { $0.name == project }),
+              let actName = p.activityName else { return nil }
+        return activities.first(where: { $0.name == actName })
+    }
+
+    // MARK: - All Project Names
+
+    /// Unique project names across explicit projects, URL rules, and intentions.
     var allProjectNames: [String] {
-        let fromIntentions = intentions.map { $0.task }
-        let fromRules = urlRules.map { $0.projectName }
-        return Array(Set(fromIntentions + fromRules)).filter { !$0.isEmpty }.sorted()
+        let explicit   = projects.map { $0.name }
+        let fromRules  = urlRules.map { $0.projectName }
+        let fromIntent = intentions.map { $0.task }
+        return Array(Set(explicit + fromRules + fromIntent)).filter { !$0.isEmpty }.sorted()
     }
 
     func renameProject(from oldName: String, to newName: String) {
         guard !newName.trimmingCharacters(in: .whitespaces).isEmpty, oldName != newName else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespaces)
+        // Update explicit projects list
+        if let idx = projects.firstIndex(where: { $0.name == oldName }) {
+            projects[idx].name = trimmed
+        }
+        persist(projects, to: projectsURL)
+        // Update URL rules
         for i in urlRules.indices where urlRules[i].projectName == oldName {
             urlRules[i].projectName = trimmed
             urlRules[i].updatedAt = Date()
         }
         persist(urlRules, to: urlRulesURL)
+        // Update intentions
         for i in intentions.indices where intentions[i].task == oldName {
             intentions[i] = Intention(
                 id: intentions[i].id,
@@ -208,14 +257,7 @@ class LocalStore: ObservableObject {
         persist(intentions, to: intentionsURL)
     }
 
-    func deleteProject(_ name: String) {
-        urlRules.removeAll { $0.projectName == name }
-        persist(urlRules, to: urlRulesURL)
-        intentions.removeAll { $0.task == name }
-        persist(intentions, to: intentionsURL)
-    }
-
-    // MARK: - Private
+    // MARK: - Private Load & Migration
 
     private func load() {
         if let data = try? Data(contentsOf: intentionsURL) {
@@ -230,18 +272,81 @@ class LocalStore: ObservableObject {
         if let data = try? Data(contentsOf: todosURL) {
             todos = (try? JSONDecoder().decode([TodoItem].self, from: data)) ?? []
         }
-        if let data = try? Data(contentsOf: projectCategoriesURL) {
-            projectCategories = (try? JSONDecoder().decode([ProjectCategory].self, from: data)) ?? []
+        if let data = try? Data(contentsOf: activitiesURL) {
+            activities = (try? JSONDecoder().decode([Activity].self, from: data)) ?? []
         }
-        if let data = try? Data(contentsOf: projectAssignmentsURL) {
-            projectAssignments = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        if let data = try? Data(contentsOf: projectsURL) {
+            projects = (try? JSONDecoder().decode([Project].self, from: data)) ?? []
         }
-        if let data = try? Data(contentsOf: urlCategoryOverridesURL) {
-            urlCategoryOverrides = (try? JSONDecoder().decode([String: TaskStatus].self, from: data)) ?? [:]
+        migrateIfNeeded()
+    }
+
+    private func migrateIfNeeded() {
+        if activities.isEmpty { migrateActivities() }
+        if projects.isEmpty   { migrateProjects()   }
+    }
+
+    private func migrateActivities() {
+        // Load legacy data
+        var legacyCategories: [LegacyProjectCategory] = []
+        var legacyOverrides: [String: TaskStatus] = [:]
+        if let data = try? Data(contentsOf: legacyProjectCategoriesURL) {
+            legacyCategories = (try? JSONDecoder().decode([LegacyProjectCategory].self, from: data)) ?? []
         }
+        if let data = try? Data(contentsOf: legacyURLCategoryOverridesURL) {
+            legacyOverrides = (try? JSONDecoder().decode([String: TaskStatus].self, from: data)) ?? [:]
+        }
+
+        // Seed default activities from URLCategory, applying any legacy status overrides
+        var seeded: [Activity] = URLCategory.allCases.filter { $0 != .unknown }.map { cat in
+            let status = legacyOverrides[cat.rawValue] ?? cat.defaultTaskStatus
+            return Activity(name: cat.displayName, status: status, urlCategoryRaw: cat.rawValue)
+        }
+        // Migrate custom categories as custom activities
+        for cat in legacyCategories where !seeded.contains(where: { $0.name == cat.name }) {
+            seeded.append(Activity(name: cat.name, status: cat.status))
+        }
+
+        activities = seeded
+        persist(activities, to: activitiesURL)
+    }
+
+    private func migrateProjects() {
+        var legacyAssignments: [String: String] = [:]
+        var legacyCategories: [LegacyProjectCategory] = []
+        if let data = try? Data(contentsOf: legacyProjectAssignmentsURL) {
+            legacyAssignments = (try? JSONDecoder().decode([String: String].self, from: data)) ?? [:]
+        }
+        if let data = try? Data(contentsOf: legacyProjectCategoriesURL) {
+            legacyCategories = (try? JSONDecoder().decode([LegacyProjectCategory].self, from: data)) ?? []
+        }
+        guard !legacyAssignments.isEmpty else { return }
+
+        for (projectName, catName) in legacyAssignments {
+            var activityName: String? = nil
+            if legacyCategories.first(where: { $0.name == catName }) != nil {
+                // Custom category migrates to activity with same name
+                activityName = catName
+            } else if let urlCat = URLCategory(rawValue: catName) {
+                // URLCategory maps to the default activity for that category
+                activityName = activities.first(where: { $0.urlCategoryRaw == urlCat.rawValue })?.name
+            }
+            if !projects.contains(where: { $0.name == projectName }) {
+                projects.append(Project(name: projectName, activityName: activityName))
+            }
+        }
+        if !projects.isEmpty { persist(projects, to: projectsURL) }
     }
 
     private func persist<T: Encodable>(_ value: T, to url: URL) {
         try? JSONEncoder().encode(value).write(to: url, options: .atomic)
     }
+}
+
+// MARK: - Legacy types for migration only
+
+private struct LegacyProjectCategory: Codable {
+    let id: UUID
+    var name: String
+    var status: TaskStatus
 }

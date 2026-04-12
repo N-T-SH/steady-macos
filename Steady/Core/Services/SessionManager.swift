@@ -84,11 +84,9 @@ class SessionManager: ObservableObject {
 
     func updateProjectConfig() async {
         guard let tracker = urlTracker else { return }
-        let categories  = LocalStore.shared.projectCategories
-        let assignments = LocalStore.shared.projectAssignments
-        let overrides   = LocalStore.shared.urlCategoryOverrides
-        await tracker.updateProjectCategories(categories, assignments: assignments,
-                                              urlCategoryOverrides: overrides)
+        let activities = LocalStore.shared.activities
+        let projects   = LocalStore.shared.projects
+        await tracker.updateProjectConfig(activities: activities, projects: projects)
     }
 
     // MARK: - Session lifecycle

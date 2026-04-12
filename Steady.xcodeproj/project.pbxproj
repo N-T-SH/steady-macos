@@ -36,6 +36,7 @@
 		00000000000000000000001D /* InfographicSpec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011D /* InfographicSpec.swift */; };
 		00000000000000000000001E /* ProjectCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011E /* ProjectCategory.swift */; };
 		00000000000000000000001F /* TodoItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000011F /* TodoItem.swift */; };
+		000000000000000000000020 /* Activity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000120 /* Activity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -79,6 +80,7 @@
 		00000000000000000000011D /* InfographicSpec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfographicSpec.swift; sourceTree = "<group>"; };
 		00000000000000000000011E /* ProjectCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCategory.swift; sourceTree = "<group>"; };
 		00000000000000000000011F /* TodoItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoItem.swift; sourceTree = "<group>"; };
+		000000000000000000000120 /* Activity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Activity.swift; sourceTree = "<group>"; };
 		000000000000000000000200 /* SteadyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SteadyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -173,6 +175,7 @@
 				00000000000000000000011D /* InfographicSpec.swift */,
 				00000000000000000000011E /* ProjectCategory.swift */,
 				00000000000000000000011F /* TodoItem.swift */,
+				000000000000000000000120 /* Activity.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -333,6 +336,7 @@
 				00000000000000000000001D /* InfographicSpec.swift in Sources */,
 				00000000000000000000001E /* ProjectCategory.swift in Sources */,
 				00000000000000000000001F /* TodoItem.swift in Sources */,
+				000000000000000000000020 /* Activity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

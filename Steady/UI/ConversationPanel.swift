@@ -2,12 +2,14 @@ import SwiftUI
 
 struct ConversationPanel: View {
     @ObservedObject var appState: AppState
+    @ObservedObject private var store = LocalStore.shared
     @State private var showingSettings = false
     @State private var showingActivityLog = false
     @State private var inputText = ""
     @State private var newTodoText = ""
     @State private var showDone = false
     @State private var showStashed = false
+    @State private var todoProjectSuggestions: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -105,13 +107,40 @@ struct ConversationPanel: View {
                     Image(systemName: "circle")
                         .font(.system(size: 13))
                         .foregroundColor(.secondary.opacity(0.35))
-                    TextField("New item…", text: $newTodoText)
+                    TextField("New item… (use #project to tag)", text: $newTodoText)
                         .textFieldStyle(PlainTextFieldStyle())
                         .font(.system(size: 12))
                         .onSubmit { commitNewTodo() }
+                        .onChange(of: newTodoText) { text in
+                            updateTodoProjectSuggestions(for: text)
+                        }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 5)
+
+                // Project tag autocomplete suggestions
+                if !todoProjectSuggestions.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(todoProjectSuggestions, id: \.self) { project in
+                            Button(action: { insertProjectTag(project) }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "number")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.accentColor)
+                                    Text(project)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .background(Color.accentColor.opacity(0.06))
+                        }
+                    }
+                }
 
                 // Done + Stashed section chips
                 if !done.isEmpty || !stashed.isEmpty {
@@ -200,6 +229,37 @@ struct ConversationPanel: View {
         guard !text.isEmpty else { return }
         appState.addTodo(text: text)
         newTodoText = ""
+        todoProjectSuggestions = []
+    }
+
+    /// Extract the current unfinished #tag at the end of text (e.g., "fix bug #ste" → "ste").
+    private func currentHashtagQuery(for text: String) -> String? {
+        guard let lastHash = text.lastIndex(of: "#") else { return nil }
+        let after = String(text[text.index(after: lastHash)...])
+        // If there's a space after the #, the tag is already complete
+        if after.contains(" ") { return nil }
+        return after
+    }
+
+    private func updateTodoProjectSuggestions(for text: String) {
+        guard let query = currentHashtagQuery(for: text) else {
+            todoProjectSuggestions = []
+            return
+        }
+        let all = store.allProjectNames
+        todoProjectSuggestions = query.isEmpty
+            ? Array(all.prefix(6))
+            : all.filter { $0.lowercased().hasPrefix(query.lowercased()) }
+    }
+
+    private func insertProjectTag(_ project: String) {
+        // Replace the partial #tag at the end with the selected project name
+        if let lastHash = newTodoText.lastIndex(of: "#") {
+            newTodoText = String(newTodoText[...lastHash]) + project
+        } else {
+            newTodoText += "#\(project)"
+        }
+        todoProjectSuggestions = []
     }
 
     // MARK: - Timer Bar
@@ -356,10 +416,22 @@ struct ConversationPanel: View {
 // MARK: - Todo Rows
 
 private struct ActiveTodoRow: View {
+    @ObservedObject private var store = LocalStore.shared
     let todo: TodoItem
     let onToggle: () -> Void
     let onStash: () -> Void
     let onDelete: () -> Void
+
+    /// Colour for the project badge, derived from the project's activity.
+    private var projectBadgeColor: Color {
+        guard let name = todo.projectName,
+              let activity = store.activity(forProject: name) else { return .accentColor }
+        switch activity.status {
+        case .onTask:     return .green
+        case .drift:      return .yellow
+        case .goofingOff: return .red
+        }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -372,11 +444,20 @@ private struct ActiveTodoRow: View {
             }
             .buttonStyle(PlainButtonStyle())
 
-            Text(todo.text)
-                .font(.system(size: 12))
-                .foregroundColor(.primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(formattedText(todo.text))
+                    .font(.system(size: 12))
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if let projectName = todo.projectName {
+                    Text("#\(projectName)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(projectBadgeColor)
+                        .lineLimit(1)
+                }
+            }
 
             // Stash
             Button(action: onStash) {
@@ -402,6 +483,22 @@ private struct ActiveTodoRow: View {
         .padding(.trailing, 4)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+    }
+
+    /// Returns an AttributedString with #tags highlighted in accent colour.
+    private func formattedText(_ text: String) -> AttributedString {
+        var result = AttributedString(text)
+        let pattern = #"#[A-Za-z0-9][A-Za-z0-9\-_]*"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return result }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        for match in matches.reversed() {
+            guard let swiftRange = Range(match.range, in: text),
+                  let lo = AttributedString.Index(swiftRange.lowerBound, within: result),
+                  let hi = AttributedString.Index(swiftRange.upperBound, within: result) else { continue }
+            result[lo..<hi].foregroundColor = Color.accentColor
+        }
+        return result
     }
 }
 
@@ -646,12 +743,17 @@ private struct ActivityLogRow: View {
 
     /// Effective status mirrors URLTracker's 3-level priority chain.
     private var displayStatus: TaskStatus {
+        // 1. Project → associated activity
         if let project = classification.project,
-           let catName = store.projectAssignments[project],
-           let cat = store.projectCategories.first(where: { $0.name == catName }) {
-            return cat.status
+           let status = store.taskStatus(forProject: project) {
+            return status
         }
-        return store.urlCategoryOverrides[classification.category.rawValue] ?? classification.taskStatus
+        // 2. URLCategory → activity override
+        if let activity = store.activities.first(where: { $0.urlCategoryRaw == classification.category.rawValue }) {
+            return activity.status
+        }
+        // 3. Stored classification status
+        return classification.taskStatus
     }
 
     private func dotColor(for status: TaskStatus) -> Color {
@@ -757,15 +859,12 @@ private struct ProjectPickerPopover: View {
     @FocusState private var newProjectFocused: Bool
 
     private func categoryLabel(for project: String) -> String {
-        guard let catName = store.projectAssignments[project],
-              let cat = store.projectCategories.first(where: { $0.name == catName }) else { return "" }
-        return cat.name
+        store.activity(forProject: project)?.name ?? ""
     }
 
     private func categoryColor(for project: String) -> Color? {
-        guard let catName = store.projectAssignments[project],
-              let cat = store.projectCategories.first(where: { $0.name == catName }) else { return nil }
-        switch cat.status {
+        guard let activity = store.activity(forProject: project) else { return nil }
+        switch activity.status {
         case .onTask:     return .green
         case .drift:      return .yellow
         case .goofingOff: return .red
@@ -839,16 +938,25 @@ private struct ProjectPickerPopover: View {
     }
 }
 
-// MARK: - Projects Section (URL category overrides + user categories + project→category assignments)
+// MARK: - Projects Section (unified Activities + Projects)
 
 private struct ProjectsSection: View {
     @ObservedObject private var store = LocalStore.shared
-    @State private var newCategoryName = ""
-    @State private var newCategoryStatus = TaskStatus.onTask
-    @State private var editingCategory: ProjectCategory? = nil
-    @State private var editCategoryName = ""
-    @State private var editCategoryStatus = TaskStatus.onTask
-    @State private var confirmingDeleteCategory: UUID? = nil
+
+    // Activity editing state
+    @State private var newActivityName = ""
+    @State private var newActivityStatus = TaskStatus.onTask
+    @State private var editingActivity: Activity? = nil
+    @State private var editActivityName = ""
+    @State private var editActivityStatus = TaskStatus.onTask
+    @State private var confirmingDeleteActivity: UUID? = nil
+
+    // Project editing state
+    @State private var newProjectName = ""
+    @State private var editingProject: Project? = nil
+    @State private var editProjectName = ""
+    @State private var editProjectActivity = ""   // "" = none
+    @State private var confirmingDeleteProject: UUID? = nil
 
     private func statusColor(_ s: TaskStatus) -> Color {
         switch s { case .onTask: return .green; case .drift: return .yellow; case .goofingOff: return .red }
@@ -856,46 +964,272 @@ private struct ProjectsSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            activityTypesSection
+            activitiesSection
             Divider()
-            categoriesSection
-            if !store.allProjectNames.isEmpty {
-                Divider()
-                assignmentsSection
+            projectsSection
+        }
+    }
+
+    // MARK: - Activities
+
+    private var activitiesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader(
+                "Activities",
+                detail: "Rename, delete, or add activity types. Default types correspond to auto-detected categories."
+            )
+
+            VStack(spacing: 3) {
+                ForEach(store.activities) { activity in
+                    if editingActivity?.id == activity.id {
+                        activityEditRow(activity)
+                    } else {
+                        activityDisplayRow(activity)
+                    }
+                }
+            }
+
+            // Add new activity row
+            HStack(spacing: 6) {
+                Circle().fill(statusColor(newActivityStatus)).frame(width: 8, height: 8)
+                TextField("New activity…", text: $newActivityName)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.system(size: 12))
+                Picker("", selection: $newActivityStatus) {
+                    ForEach(TaskStatus.allCases, id: \.self) { s in Text(s.displayName).tag(s) }
+                }
+                .labelsHidden().frame(width: 100)
+                Button("Add") {
+                    let name = newActivityName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    store.save(activity: Activity(name: name, status: newActivityStatus))
+                    newActivityName = ""
+                    newActivityStatus = .onTask
+                }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+                .disabled(newActivityName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
     }
 
-    // MARK: Activity Types (auto-generated URLCategory overrides)
+    @ViewBuilder
+    private func activityEditRow(_ activity: Activity) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(statusColor(editActivityStatus)).frame(width: 8, height: 8)
+            TextField("Activity name", text: $editActivityName)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .font(.system(size: 12))
+            Picker("", selection: $editActivityStatus) {
+                ForEach(TaskStatus.allCases, id: \.self) { s in Text(s.displayName).tag(s) }
+            }
+            .labelsHidden().frame(width: 100)
+            Button("Save") {
+                let name = editActivityName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                var updated = activity
+                updated.name   = name
+                updated.status = editActivityStatus
+                store.save(activity: updated)
+                editingActivity = nil
+            }
+            .buttonStyle(BorderedProminentButtonStyle()).controlSize(.mini)
+            .disabled(editActivityName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel") { editingActivity = nil }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+        }
+        .padding(.vertical, 2)
+    }
 
-    private var activityTypesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Activity Types", detail: "Override the default status for auto-detected categories.")
-
-            VStack(spacing: 3) {
-                ForEach(URLCategory.allCases.filter { $0 != .unknown }, id: \.self) { urlCat in
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(statusColor(store.effectiveStatus(for: urlCat)))
-                            .frame(width: 8, height: 8)
-                        Text(urlCat.displayName)
-                            .font(.system(size: 12)).lineLimit(1)
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { store.effectiveStatus(for: urlCat) },
-                            set: { store.setURLCategoryOverride(urlCat, status: $0) }
-                        )) {
-                            ForEach(TaskStatus.allCases, id: \.self) { s in
-                                Text(s.displayName).tag(s)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 110)
-                    }
-                    .padding(.vertical, 1)
+    @ViewBuilder
+    private func activityDisplayRow(_ activity: Activity) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(statusColor(activity.status)).frame(width: 8, height: 8)
+            Text(activity.name).font(.system(size: 12)).lineLimit(1)
+            if activity.isDefault {
+                Text("built-in")
+                    .font(.system(size: 9)).foregroundColor(.secondary.opacity(0.6))
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(3)
+            }
+            Spacer()
+            Picker("", selection: Binding(
+                get: { activity.status },
+                set: { newStatus in
+                    var updated = activity
+                    updated.status = newStatus
+                    store.save(activity: updated)
                 }
+            )) {
+                ForEach(TaskStatus.allCases, id: \.self) { s in Text(s.displayName).tag(s) }
+            }
+            .labelsHidden().frame(width: 110)
+
+            Button(action: {
+                editActivityName   = activity.name
+                editActivityStatus = activity.status
+                editingActivity    = activity
+            }) {
+                Image(systemName: "pencil").font(.system(size: 11))
+            }
+            .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
+
+            if confirmingDeleteActivity == activity.id {
+                Button("Delete?") {
+                    store.deleteActivity(id: activity.id)
+                    confirmingDeleteActivity = nil
+                }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini).foregroundColor(.red)
+                Button("No") { confirmingDeleteActivity = nil }
+                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+            } else {
+                Button(action: { confirmingDeleteActivity = activity.id }) {
+                    Image(systemName: "trash").font(.system(size: 11))
+                }
+                .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
             }
         }
+        .padding(.vertical, 1)
+    }
+
+    // MARK: - Projects
+
+    private var projectsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionHeader(
+                "Projects",
+                detail: "Tag todos or chat with #project-name. Auto-detected from activity and added automatically."
+            )
+
+            // Default sentinel shown at top
+            HStack(spacing: 6) {
+                Circle().fill(Color.secondary.opacity(0.35)).frame(width: 8, height: 8)
+                Text("No Project / Quest")
+                    .font(.system(size: 12)).foregroundColor(.secondary)
+                Text("default")
+                    .font(.system(size: 9)).foregroundColor(.secondary.opacity(0.6))
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(3)
+                Spacer()
+            }
+            .padding(.vertical, 1)
+
+            if !store.projects.isEmpty {
+                VStack(spacing: 3) {
+                    ForEach(store.projects) { project in
+                        if editingProject?.id == project.id {
+                            projectEditRow(project)
+                        } else {
+                            projectDisplayRow(project)
+                        }
+                    }
+                }
+            }
+
+            // Add new project row
+            HStack(spacing: 6) {
+                Circle().fill(Color.secondary.opacity(0.35)).frame(width: 8, height: 8)
+                TextField("New project…", text: $newProjectName)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .font(.system(size: 12))
+                Button("Add") {
+                    let name = newProjectName.trimmingCharacters(in: .whitespaces)
+                    guard !name.isEmpty else { return }
+                    store.save(project: Project(name: name))
+                    newProjectName = ""
+                }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+                .disabled(newProjectName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func projectEditRow(_ project: Project) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(projectColor(for: project)).frame(width: 8, height: 8)
+            TextField("Project name", text: $editProjectName)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .font(.system(size: 12))
+            activityPickerView(selection: $editProjectActivity)
+            Button("Save") {
+                let name = editProjectName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                var updated = project
+                updated.name         = name
+                updated.activityName = editProjectActivity.isEmpty ? nil : editProjectActivity
+                store.save(project: updated)
+                editingProject = nil
+            }
+            .buttonStyle(BorderedProminentButtonStyle()).controlSize(.mini)
+            .disabled(editProjectName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("Cancel") { editingProject = nil }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+        }
+        .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func projectDisplayRow(_ project: Project) -> some View {
+        HStack(spacing: 6) {
+            Circle().fill(projectColor(for: project)).frame(width: 8, height: 8)
+            Text(project.name).font(.system(size: 12)).lineLimit(1)
+            if let actName = project.activityName {
+                Text(actName)
+                    .font(.system(size: 10)).foregroundColor(.secondary)
+            }
+            Spacer()
+            Button(action: {
+                editProjectName     = project.name
+                editProjectActivity = project.activityName ?? ""
+                editingProject      = project
+            }) {
+                Image(systemName: "pencil").font(.system(size: 11))
+            }
+            .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
+
+            if confirmingDeleteProject == project.id {
+                Button("Delete?") {
+                    store.deleteProject(id: project.id)
+                    confirmingDeleteProject = nil
+                }
+                .buttonStyle(BorderedButtonStyle()).controlSize(.mini).foregroundColor(.red)
+                Button("No") { confirmingDeleteProject = nil }
+                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
+            } else {
+                Button(action: { confirmingDeleteProject = project.id }) {
+                    Image(systemName: "trash").font(.system(size: 11))
+                }
+                .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 1)
+    }
+
+    // MARK: - Helpers
+
+    private func projectColor(for project: Project) -> Color {
+        guard let actName = project.activityName,
+              let activity = store.activities.first(where: { $0.name == actName }) else {
+            return Color.secondary.opacity(0.35)
+        }
+        return statusColor(activity.status)
+    }
+
+    private func activityPickerView(selection: Binding<String>) -> some View {
+        Picker("", selection: selection) {
+            Text("(none)").tag("")
+            ForEach(store.activities, id: \.name) { activity in
+                HStack(spacing: 4) {
+                    Circle().fill(statusColor(activity.status)).frame(width: 7, height: 7)
+                    Text(activity.name)
+                }
+                .tag(activity.name)
+            }
+        }
+        .labelsHidden()
+        .frame(width: 120)
     }
 
     @ViewBuilder
@@ -906,160 +1240,6 @@ private struct ProjectsSection: View {
                 .textCase(.uppercase).tracking(0.4)
             if let detail = detail {
                 Text(detail).font(.system(size: 10)).foregroundColor(.secondary.opacity(0.8))
-            }
-        }
-    }
-
-    // MARK: User Categories
-
-    private var categoriesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Custom Categories", detail: "Group projects into named categories with a status.")
-
-            if store.projectCategories.isEmpty {
-                Text("No categories yet. Add one below.")
-                    .font(.system(size: 11)).foregroundColor(.secondary)
-            } else {
-                VStack(spacing: 3) {
-                    ForEach(store.projectCategories) { cat in
-                        if editingCategory?.id == cat.id {
-                            // Inline edit row
-                            HStack(spacing: 6) {
-                                Circle().fill(statusColor(editCategoryStatus)).frame(width: 8, height: 8)
-                                TextField("Category name", text: $editCategoryName)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .font(.system(size: 12))
-                                Picker("", selection: $editCategoryStatus) {
-                                    ForEach(TaskStatus.allCases, id: \.self) { s in
-                                        Text(s.displayName).tag(s)
-                                    }
-                                }
-                                .labelsHidden()
-                                .frame(width: 100)
-                                Button("Save") {
-                                    let name = editCategoryName.trimmingCharacters(in: .whitespaces)
-                                    guard !name.isEmpty else { return }
-                                    var updated = cat
-                                    updated.name   = name
-                                    updated.status = editCategoryStatus
-                                    store.save(projectCategory: updated)
-                                    editingCategory = nil
-                                }
-                                .buttonStyle(BorderedProminentButtonStyle()).controlSize(.mini)
-                                .disabled(editCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
-                                Button("Cancel") { editingCategory = nil }
-                                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
-                            }
-                            .padding(.vertical, 2)
-                        } else {
-                            HStack(spacing: 6) {
-                                Circle().fill(statusColor(cat.status)).frame(width: 8, height: 8)
-                                Text(cat.name).font(.system(size: 12)).lineLimit(1)
-                                Text(cat.status.displayName)
-                                    .font(.system(size: 10)).foregroundColor(.secondary)
-                                Spacer()
-                                Button(action: {
-                                    editCategoryName   = cat.name
-                                    editCategoryStatus = cat.status
-                                    editingCategory    = cat
-                                }) {
-                                    Image(systemName: "pencil").font(.system(size: 11))
-                                }
-                                .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
-                                if confirmingDeleteCategory == cat.id {
-                                    Button("Delete?") {
-                                        store.deleteProjectCategory(id: cat.id)
-                                        confirmingDeleteCategory = nil
-                                    }
-                                    .buttonStyle(BorderedButtonStyle()).controlSize(.mini).foregroundColor(.red)
-                                    Button("No") { confirmingDeleteCategory = nil }
-                                        .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
-                                } else {
-                                    Button(action: { confirmingDeleteCategory = cat.id }) {
-                                        Image(systemName: "trash").font(.system(size: 11))
-                                    }
-                                    .buttonStyle(PlainButtonStyle()).foregroundColor(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                }
-            }
-
-            // Add new category
-            HStack(spacing: 6) {
-                Circle().fill(statusColor(newCategoryStatus)).frame(width: 8, height: 8)
-                TextField("New category…", text: $newCategoryName)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .font(.system(size: 12))
-                Picker("", selection: $newCategoryStatus) {
-                    ForEach(TaskStatus.allCases, id: \.self) { s in
-                        Text(s.displayName).tag(s)
-                    }
-                }
-                .labelsHidden()
-                .frame(width: 100)
-                Button("Add") {
-                    let name = newCategoryName.trimmingCharacters(in: .whitespaces)
-                    guard !name.isEmpty else { return }
-                    store.save(projectCategory: ProjectCategory(name: name, status: newCategoryStatus))
-                    newCategoryName = ""
-                    newCategoryStatus = .onTask
-                }
-                .buttonStyle(BorderedButtonStyle()).controlSize(.mini)
-                .disabled(newCategoryName.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-    }
-
-    // MARK: Project → Category Assignments
-
-    private var assignmentsSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("Project → Category", detail: "Applies to all projects — auto-detected and manual.")
-
-            VStack(spacing: 3) {
-                ForEach(store.allProjectNames, id: \.self) { project in
-                    HStack(spacing: 6) {
-                        Text(project)
-                            .font(.system(size: 12)).lineLimit(1)
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { store.projectAssignments[project] ?? "" },
-                            set: { store.assignCategory(toProject: project, categoryName: $0.isEmpty ? nil : $0) }
-                        )) {
-                            Text("(none)").tag("")
-                            if !store.projectCategories.isEmpty {
-                                Divider()
-                                ForEach(store.projectCategories, id: \.name) { cat in
-                                    Label {
-                                        Text(cat.name)
-                                    } icon: {
-                                        Image(systemName: "circle.fill")
-                                            .foregroundColor(statusColor(cat.status))
-                                            .font(.system(size: 8))
-                                    }
-                                    .tag(cat.name)
-                                }
-                            }
-                            Divider()
-                            ForEach(URLCategory.allCases.filter { $0 != .unknown }, id: \.self) { urlCat in
-                                Label {
-                                    Text(urlCat.displayName)
-                                } icon: {
-                                    Image(systemName: "circle.fill")
-                                        .foregroundColor(statusColor(store.effectiveStatus(for: urlCat)))
-                                        .font(.system(size: 8))
-                                }
-                                .tag(urlCat.rawValue)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 130)
-                    }
-                    .padding(.vertical, 1)
-                }
             }
         }
     }

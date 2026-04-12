@@ -508,7 +508,13 @@ actor LLMProvider {
         • [TODO:task text] — emit this when the user mentions a specific task they need to do or want to track \
         (e.g. "I need to fix the login bug", "remind me to email John", "add error handling to the API"). \
         The task will be added to their to-do list automatically and the list will pop open. \
-        Only emit when a clear, actionable task is stated. task text should be concise (under 60 chars).
+        Only emit when a clear, actionable task is stated. task text should be concise (under 60 chars). \
+        You may append #project-name to the task text to tag it with a project (e.g. [TODO:Fix login bug #steady]).
+
+        Project tagging:
+        • Users can mention #project-name anywhere in their messages to refer to or create a project. \
+        If you detect the user discussing work related to a specific project or explicitly naming one with #, \
+        acknowledge it naturally. Projects auto-register when mentioned with # or detected from activity.
         """
 
         return prompt

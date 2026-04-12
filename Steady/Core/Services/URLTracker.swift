@@ -52,20 +52,26 @@ actor URLTracker {
         self.knownProjects = projects
     }
 
-    func updateProjectCategories(_ categories: [ProjectCategory], assignments: [String: String],
-                                  urlCategoryOverrides: [String: TaskStatus] = [:]) {
-        var map: [String: TaskStatus] = [:]
-        for (project, catName) in assignments {
-            if let cat = categories.first(where: { $0.name == catName }) {
-                // Custom category
-                map[project] = cat.status
-            } else if let urlCat = URLCategory(rawValue: catName) {
-                // URLCategory rawValue — respect any user override for that category
-                map[project] = urlCategoryOverrides[catName] ?? urlCat.defaultTaskStatus
+    /// Update status maps from the unified activities + projects model.
+    func updateProjectConfig(activities: [Activity], projects: [Project]) {
+        // Build project → status map from explicit project/activity associations
+        var statusMap: [String: TaskStatus] = [:]
+        for project in projects {
+            if let actName = project.activityName,
+               let activity = activities.first(where: { $0.name == actName }) {
+                statusMap[project.name] = activity.status
             }
         }
-        self.projectStatusMap        = map
-        self.urlCategoryOverrideMap  = urlCategoryOverrides
+        self.projectStatusMap = statusMap
+
+        // Build URLCategory override map from activities that map to URLCategory rawValues
+        var overrideMap: [String: TaskStatus] = [:]
+        for activity in activities {
+            if let raw = activity.urlCategoryRaw {
+                overrideMap[raw] = activity.status
+            }
+        }
+        self.urlCategoryOverrideMap = overrideMap
     }
 
     func updateIntention(_ intention: Intention?) {

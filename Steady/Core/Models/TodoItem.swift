@@ -9,16 +9,19 @@ struct TodoItem: Codable, Identifiable, Equatable {
     let createdAt: Date
     var completedAt: Date?
     var stashedAt: Date?
+    /// Project name extracted from a #project-name tag in the todo text.
+    var projectName: String?
 
-    init(id: UUID = UUID(), text: String, order: Int = 0) {
-        self.id = id
-        self.text = text
+    init(id: UUID = UUID(), text: String, order: Int = 0, projectName: String? = nil) {
+        self.id          = id
+        self.text        = text
         self.isCompleted = false
-        self.isStashed = false
-        self.order = order
-        self.createdAt = Date()
+        self.isStashed   = false
+        self.order       = order
+        self.createdAt   = Date()
         self.completedAt = nil
-        self.stashedAt = nil
+        self.stashedAt   = nil
+        self.projectName = projectName
     }
 
     mutating func complete() {
