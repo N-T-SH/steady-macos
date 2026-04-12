@@ -1,5 +1,12 @@
 .DS_Store
 *.xcuserdatad
+xcuserdata/
 .obsidian/
 FEEDBACK.md
+IMPLEMENTATION_PLAN.md
 *.png
+.claude/
+*.xcarchive
+DerivedData/
+Export/
+*.dmg
