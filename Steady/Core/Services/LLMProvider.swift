@@ -102,23 +102,23 @@ actor LLMProvider {
         Output format — pick ONE cardType and fill only its fields. Omit unused fields entirely.
 
         stat:
-        {"cardType":"stat","label":"<3–4 word label>","value":"<concise value>","subtitle":"<optional 1-line note>","accent":"green"|"yellow"|"red"|null}
+        {"cardType":"stat","label":"<3–4 word label>","value":"<concise value>","subtitle":"<optional 1-line note>","accent":"green"|"purple"|"red"|null}
 
         multiStat (2–3 items):
         {"cardType":"multiStat","items":[{"label":"<label>","value":"<value>"},…]}
 
         barSplit (2–3 segments, ratios must sum to 1.0):
-        {"cardType":"barSplit","barTitle":"<short title>","segments":[{"label":"<l>","ratio":<r>,"color":"green"|"yellow"|"red"|"gray"},…]}
+        {"cardType":"barSplit","barTitle":"<short title>","segments":[{"label":"<l>","ratio":<r>,"color":"green"|"purple"|"red"|"gray"},…]}
 
         dotRow (up to 12 dots):
-        {"cardType":"dotRow","dotTitle":"<short title>","dots":["green"|"yellow"|"red"|"gray",…]}
+        {"cardType":"dotRow","dotTitle":"<short title>","dots":["green"|"purple"|"red"|"gray",…]}
 
         labelValue (exactly 2 rows):
         {"cardType":"labelValue","rows":[{"label":"<l>","value":"<v>"},{"label":"<l>","value":"<v>"}]}
 
         Rules:
         - All text must be short: labels ≤ 15 chars, values ≤ 10 chars, subtitle ≤ 40 chars.
-        - Use "green" for positive stats, "yellow" for drift/warnings (purple in UI), "red" for goofing-off nudges.
+        - Use "green" for positive stats, "purple" for drift/warnings, "red" for goofing-off nudges.
         - If there is no activity data yet, use concept 17 (morning_warmup) with a stat card.
         - Return ONLY the JSON object. No explanation, no markdown fences.
         """

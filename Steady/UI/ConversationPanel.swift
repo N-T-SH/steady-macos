@@ -766,10 +766,10 @@ struct ActivityLogView: View {
     private var allActivity: [URLClassification] { sm?.allActivityToday ?? [] }
 
     private var knownProjects: [String] {
-        let fromIntentions = appState.localStore.intentions.map { $0.task }
-        let fromActivity   = allActivity.compactMap { $0.project }
-        return Array(Set(fromIntentions + fromActivity))
-            .filter { !$0.isEmpty }.sorted()
+        let activeProjects = Set(allActivity.compactMap { $0.project }.filter { !$0.isEmpty })
+        return appState.localStore.projects.map { $0.name }
+            .filter { activeProjects.contains($0) }
+            .sorted()
     }
 
     private var filteredActivity: [URLClassification] {
@@ -1594,7 +1594,8 @@ struct InfographicCardView: View {
         switch name {
         case "green":  return .steadyProductive // on-task → cyan glow
         case "blue":   return .steadyProductive // treated as productive
-        case "yellow": return .steadyDrift      // drift → muted red
+        case "purple": return .steadyDrift      // drift → purple dot
+        case "yellow": return .steadyDrift      // legacy token for drift
         case "orange": return .steadyDrift      // legacy LLM name for drift
         case "red":    return .steadyGoof       // goofing off → vivid red
         case "gray":   return .gray
@@ -1613,8 +1614,8 @@ struct InfographicCardView: View {
                 .fill(Color.steadyProductive)
                 .frame(width: 14, height: 6)
                 .shadow(color: Color.steadyProductive.opacity(0.65), radius: 3)
-        case "yellow", "orange":
-            // Drift: small red dot — present but not a full pill
+        case "purple", "yellow", "orange":
+            // Drift: small purple dot — present but not a full pill
             Circle()
                 .fill(Color.steadyDrift)
                 .frame(width: 6, height: 6)

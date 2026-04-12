@@ -453,7 +453,7 @@ class AppState: ObservableObject {
             var segments: [InfographicSpec.BarSegment] = [
                 .init(label: "On-task", ratio: onRatio,    color: "green")
             ]
-            if driftRatio > 0 { segments.append(.init(label: "Drift",   ratio: driftRatio, color: "yellow")) }
+            if driftRatio > 0 { segments.append(.init(label: "Drift",   ratio: driftRatio, color: "purple")) }
             if goofRatio  > 0 { segments.append(.init(label: "Off",     ratio: goofRatio,  color: "red")) }
             return .barSplit(title: "Today's focus", segments: segments)
         }

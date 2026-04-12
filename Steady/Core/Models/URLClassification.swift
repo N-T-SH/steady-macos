@@ -19,7 +19,7 @@ enum TaskStatus: String, Codable, CaseIterable {
     var colorName: String {
         switch self {
         case .onTask:     return "green"
-        case .drift:      return "yellow"
+        case .drift:      return "purple"
         case .goofingOff: return "red"
         }
     }
