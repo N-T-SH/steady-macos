@@ -118,7 +118,7 @@ actor LLMProvider {
 
         Rules:
         - All text must be short: labels ≤ 15 chars, values ≤ 10 chars, subtitle ≤ 40 chars.
-        - Use "green" for positive stats, "yellow" for drift/warnings, "red" for goofing-off nudges.
+        - Use "green" for positive stats, "yellow" for drift/warnings (purple in UI), "red" for goofing-off nudges.
         - If there is no activity data yet, use concept 17 (morning_warmup) with a stat card.
         - Return ONLY the JSON object. No explanation, no markdown fences.
         """

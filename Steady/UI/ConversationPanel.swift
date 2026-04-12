@@ -1400,11 +1400,11 @@ private struct ProjectsSection: View {
 // MARK: - Steady Visual System Palette
 
 /// Design tokens that mirror the menu-bar icon's visual language.
-/// Productive = cyan glow pill · Drift = red dot · Goofing = red glow pill
+/// Productive = cyan glow pill · Drift = purple dot · Goofing = red glow pill
 extension Color {
     static let steadyProductive = Color(red: 0.22, green: 0.80, blue: 0.98) // on-task → cyan
-    static let steadyDrift      = Color(red: 0.95, green: 0.28, blue: 0.28) // drift → muted red dot
-    static let steadyGoof       = Color(red: 1.00, green: 0.12, blue: 0.12) // goofing off → vivid red halo
+    static let steadyDrift      = Color(red: 0.65, green: 0.25, blue: 0.95) // drift → purple dot
+    static let steadyGoof       = Color(red: 0.95, green: 0.28, blue: 0.28) // goofing off → red halo
 }
 
 // MARK: - Infographic Card View
