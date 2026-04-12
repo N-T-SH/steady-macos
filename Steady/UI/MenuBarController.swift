@@ -8,17 +8,21 @@ class MenuBarController: NSObject {
     var panel: NSPanel!
     var appState: AppState!
     var hostingController: NSHostingController<ConversationPanel>!
-    
+
     // Panel configuration
     private let panelWidth: CGFloat = 400
     private let panelHeight: CGFloat = 600
-    
+
     // Hotkey support
     private var eventMonitor: Any?
     private var globalHotkey: EventHotKeyRef?
 
-    // Hourly check-in flash
+    // Hourly check-in pulse
     private var hourlyCheckInTimer: Timer?
+    private var pulseStopTimer: Timer?
+
+    // Icon animator
+    private let iconAnimator = MenuBarIconAnimator()
     
     func setupMenuBar() {
         NotificationCenter.default.addObserver(
@@ -30,11 +34,10 @@ class MenuBarController: NSObject {
         
         // Configure the status item button
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Steady")
-            button.image?.size = NSSize(width: 18, height: 18)
             button.action = #selector(togglePanel)
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            iconAnimator.showPassive(on: button)
         }
         
         // Setup the panel
@@ -172,19 +175,14 @@ class MenuBarController: NSObject {
 
     @objc private func handleTimerExpired() {
         guard let button = statusItem.button else { return }
-        var count = 0
-        Timer.scheduledTimer(withTimeInterval: 0.45, repeats: true) { [weak button] timer in
-            count += 1
-            let isOrange = count % 2 == 1
-            button?.contentTintColor = isOrange ? .orange : nil
-            button?.image = NSImage(
-                systemSymbolName: isOrange ? "waveform.circle.fill" : "waveform",
-                accessibilityDescription: "Steady"
-            )
-            button?.image?.size = NSSize(width: 18, height: 18)
-            if count >= 12 { // ~5.4 seconds
-                timer.invalidate()
-                button?.contentTintColor = nil
+        // Start the slow breathing pulse to draw the user's attention.
+        iconAnimator.startPulse(on: button)
+        // Auto-revert to passive after 60 s if the user doesn't open the panel.
+        pulseStopTimer?.invalidate()
+        pulseStopTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, let button = self.statusItem.button, !self.panel.isVisible else { return }
+                self.iconAnimator.showPassive(on: button)
             }
         }
     }
@@ -224,13 +222,15 @@ class MenuBarController: NSObject {
     
     private func updateStatusItemAppearance() {
         guard let button = statusItem.button else { return }
-        
         if panel.isVisible {
-            button.image = NSImage(systemSymbolName: "waveform.circle.fill", accessibilityDescription: "Steady Active")
+            // Panel open — solid filled pill, no pulse
+            pulseStopTimer?.invalidate()
+            pulseStopTimer = nil
+            iconAnimator.showSolid(on: button)
         } else {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Steady")
+            // Panel closed — back to passive outline
+            iconAnimator.showPassive(on: button)
         }
-        button.image?.size = NSSize(width: 18, height: 18)
     }
     
     deinit {
