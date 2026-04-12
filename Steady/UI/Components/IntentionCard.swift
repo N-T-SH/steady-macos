@@ -115,9 +115,9 @@ struct StatusBadge: View {
     var statusColor: Color {
         switch status {
         case .planned:
-            return .blue
+            return .steadyProductive
         case .active:
-            return .green
+            return .steadyProductive
         case .completed:
             return .purple
         case .skipped:

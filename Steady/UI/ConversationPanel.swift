@@ -910,9 +910,9 @@ private struct ActivityLogRow: View {
 
     private func dotColor(for status: TaskStatus) -> Color {
         switch status {
-        case .onTask:     return .green
-        case .drift:      return .yellow
-        case .goofingOff: return .red
+        case .onTask:     return .steadyProductive
+        case .drift:      return .steadyDrift
+        case .goofingOff: return .steadyGoof
         }
     }
 
@@ -1017,9 +1017,9 @@ private struct ProjectPickerPopover: View {
     private func categoryColor(for project: String) -> Color? {
         guard let activity = store.activity(forProject: project) else { return nil }
         switch activity.status {
-        case .onTask:     return .green
-        case .drift:      return .yellow
-        case .goofingOff: return .red
+        case .onTask:     return .steadyProductive
+        case .drift:      return .steadyDrift
+        case .goofingOff: return .steadyGoof
         }
     }
 
@@ -1111,7 +1111,7 @@ private struct ProjectsSection: View {
     @State private var confirmingDeleteProject: UUID? = nil
 
     private func statusColor(_ s: TaskStatus) -> Color {
-        switch s { case .onTask: return .green; case .drift: return .yellow; case .goofingOff: return .red }
+        switch s { case .onTask: return .steadyProductive; case .drift: return .steadyDrift; case .goofingOff: return .steadyGoof }
     }
 
     var body: some View {
@@ -1397,6 +1397,16 @@ private struct ProjectsSection: View {
     }
 }
 
+// MARK: - Steady Visual System Palette
+
+/// Design tokens that mirror the menu-bar icon's visual language.
+/// Productive = cyan glow pill · Drift = red dot · Goofing = red glow pill
+extension Color {
+    static let steadyProductive = Color(red: 0.22, green: 0.80, blue: 0.98) // on-task → cyan
+    static let steadyDrift      = Color(red: 0.95, green: 0.28, blue: 0.28) // drift → muted red dot
+    static let steadyGoof       = Color(red: 1.00, green: 0.12, blue: 0.12) // goofing off → vivid red halo
+}
+
 // MARK: - Infographic Card View
 
 struct InfographicCardView: View {
@@ -1514,20 +1524,22 @@ struct InfographicCardView: View {
             GeometryReader { geo in
                 HStack(spacing: 2) {
                     ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                        let c = color(for: seg.color) ?? Color.gray
+                        let isProductive = seg.color == "green" || seg.color == "blue"
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(color(for: seg.color) ?? .gray)
+                            .fill(c)
                             .frame(width: max(4, geo.size.width * CGFloat(seg.ratio) - 2))
+                            .shadow(color: isProductive ? c.opacity(0.5) : .clear, radius: 3)
                     }
                 }
             }
             .frame(height: 8)
-            // Legend
+            // Legend — use activity-dot shapes for consistency
             HStack(spacing: 10) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
-                    HStack(spacing: 3) {
-                        Circle()
-                            .fill(color(for: seg.color) ?? .gray)
-                            .frame(width: 5, height: 5)
+                    HStack(spacing: 4) {
+                        activityDot(for: seg.color)
+                            .scaleEffect(0.7)
                         Text(seg.label)
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
@@ -1549,11 +1561,9 @@ struct InfographicCardView: View {
                     .textCase(.uppercase)
                     .tracking(0.4)
             }
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 ForEach(Array(dots.prefix(12).enumerated()), id: \.offset) { _, dot in
-                    Circle()
-                        .fill(color(for: dot) ?? .gray)
-                        .frame(width: 8, height: 8)
+                    activityDot(for: dot)
                 }
             }
         }
@@ -1578,17 +1588,47 @@ struct InfographicCardView: View {
         }
     }
 
-    // MARK: Helper
+    // MARK: Helper — colour name → Steady palette
 
     private func color(for name: String?) -> Color? {
         switch name {
-        case "green":  return .green
-        case "yellow": return .yellow
-        case "red":    return .red
-        case "orange": return .orange   // legacy LLM responses
-        case "blue":   return .blue
+        case "green":  return .steadyProductive // on-task → cyan glow
+        case "blue":   return .steadyProductive // treated as productive
+        case "yellow": return .steadyDrift      // drift → muted red
+        case "orange": return .steadyDrift      // legacy LLM name for drift
+        case "red":    return .steadyGoof       // goofing off → vivid red
         case "gray":   return .gray
         default:       return nil
+        }
+    }
+
+    // MARK: Activity dot — shape encodes meaning (mirrors menu-bar icon visual language)
+
+    @ViewBuilder
+    private func activityDot(for colorName: String) -> some View {
+        switch colorName {
+        case "green", "blue":
+            // Productive: mini cyan pill with glow — mirrors the active menu-bar icon
+            Capsule()
+                .fill(Color.steadyProductive)
+                .frame(width: 14, height: 6)
+                .shadow(color: Color.steadyProductive.opacity(0.65), radius: 3)
+        case "yellow", "orange":
+            // Drift: small red dot — present but not a full pill
+            Circle()
+                .fill(Color.steadyDrift)
+                .frame(width: 6, height: 6)
+        case "red":
+            // Goofing off: vivid red pill with red halo
+            Capsule()
+                .fill(Color.steadyGoof)
+                .frame(width: 14, height: 6)
+                .shadow(color: Color.steadyGoof.opacity(0.55), radius: 3)
+        default:
+            // Unknown / inactive: small muted circle
+            Circle()
+                .fill(Color.gray.opacity(0.35))
+                .frame(width: 6, height: 6)
         }
     }
 }
