@@ -25,6 +25,21 @@ Most focus tools rely on restriction. Steady takes the opposite approach: it hel
 - **Obsidian sync** — session summaries written as Markdown files into your vault
 - **Todos** — lightweight task list integrated into the panel
 
+## ActivityWatch Integration
+
+Steady uses [ActivityWatch](https://activitywatch.net) — a free, open-source, privacy-first time tracker — to read your active browser URLs and app window titles. ActivityWatch runs entirely on your machine; no data is sent to any server. Steady polls its local REST API (`http://localhost:5600`) every 10 seconds.
+
+### Setup
+
+1. **Download and install ActivityWatch** from [activitywatch.net](https://activitywatch.net)
+2. **Install the browser extension** for [Chrome](https://chrome.google.com/webstore/detail/activitywatch-web-watcher/nglaklhklhcoonedhgnpgddginnjdadi) or [Firefox](https://addons.mozilla.org/en-US/firefox/addon/aw-watcher-web/) — this is what gives Steady visibility into browser URLs
+3. **Launch ActivityWatch** — it runs as a menu bar app and starts its local server automatically
+4. **Open Steady** — it will connect to ActivityWatch automatically within ~10 seconds. You'll see "ActivityWatch connected" in the panel when it's working.
+
+No configuration is needed inside Steady itself. If ActivityWatch is not running, Steady will show a prompt with setup instructions.
+
+> **Credit:** Activity tracking in Steady is powered by [ActivityWatch](https://activitywatch.net) ([GitHub](https://github.com/ActivityWatch/activitywatch)), created by Erik Bjäreholt and contributors. ActivityWatch is MIT licensed.
+
 ## Installation
 
 **Requirements:** macOS 14.0+, Xcode 15.0+
