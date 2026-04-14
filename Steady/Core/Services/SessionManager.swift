@@ -46,6 +46,8 @@ class SessionManager: ObservableObject {
         let tracker = URLTracker()
         self.urlTracker = tracker
         await tracker.setDelegate(self)
+        // Remove any stale domain-level rules for sites that need per-page classification.
+        LocalStore.shared.purgeURLRules(forDomains: URLTracker.dynamicContentDomains)
         let rules = LocalStore.shared.urlRules
         let projects = LocalStore.shared.intentions.map { $0.task }
         await tracker.startTracking(llmProvider: llmProvider, knownRules: rules, knownProjects: projects)

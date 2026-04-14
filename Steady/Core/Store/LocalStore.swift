@@ -109,6 +109,13 @@ class LocalStore: ObservableObject {
         persist(urlRules, to: urlRulesURL)
     }
 
+    /// Remove any cached rules for domains that require per-page classification.
+    func purgeURLRules(forDomains domains: Set<String>) {
+        let before = urlRules.count
+        urlRules.removeAll { domains.contains($0.domain) }
+        if urlRules.count != before { persist(urlRules, to: urlRulesURL) }
+    }
+
     // MARK: - Todos
 
     func save(todo: TodoItem) {

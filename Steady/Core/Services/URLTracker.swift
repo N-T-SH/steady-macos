@@ -264,6 +264,23 @@ actor URLTracker {
         }
     }
 
+    // MARK: - Dynamic content domains
+
+    /// Domains where per-page title matters for classification.
+    /// A single domain-level URLRule would mis-classify vastly different content
+    /// (e.g. a research YouTube video vs entertainment). Always run the LLM for
+    /// these and never persist a domain-level rule.
+    static let dynamicContentDomains: Set<String> = [
+        "www.youtube.com", "youtube.com",
+        "youtu.be",
+        "www.vimeo.com", "vimeo.com",
+        "www.twitch.tv", "twitch.tv",
+        "www.netflix.com", "netflix.com",
+        "www.reddit.com", "reddit.com",
+        "twitter.com", "x.com",
+        "www.tiktok.com", "tiktok.com",
+    ]
+
     // MARK: - Classification
 
     private func classifyAndNotify(url: String, title: String) async {
@@ -272,7 +289,9 @@ actor URLTracker {
             ? url
             : (URL(string: url)?.host ?? url)
 
-        if let rule = knownRules.first(where: { $0.domain == ruleKey }) {
+        let isDynamic = dynamicContentDomains.contains(ruleKey)
+
+        if !isDynamic, let rule = knownRules.first(where: { $0.domain == ruleKey }) {
             // Only honour the saved rule's project if the project still exists.
             // A deleted project must not bleed into new classifications.
             let project: String? = activeProjectNames.contains(rule.projectName) ? rule.projectName : nil
@@ -329,7 +348,9 @@ actor URLTracker {
             delegate?.urlTracker(self, didClassifyURL: finalClassification)
 
             // Only persist a URL rule for active user-defined projects.
-            if let project = finalClassification.project, !project.isEmpty,
+            // Skip dynamic content domains — their classification depends on page title,
+            // not the domain, so a domain-level rule would mis-classify future visits.
+            if !isDynamic, let project = finalClassification.project, !project.isEmpty,
                activeProjectNames.contains(project) {
                 delegate?.urlTracker(self, didDiscoverNewRule: ruleKey, projectName: project, category: finalClassification.category)
             }
